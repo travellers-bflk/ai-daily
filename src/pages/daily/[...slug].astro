@@ -1,7 +1,10 @@
 ---
-import { getCollection, render } from 'astro:content';
+import { getCollection } from 'astro:content';
 import Base from '../../layouts/Base.astro';
-import { formatDate } from '../../lib/utils';
+import SectionIcon from '../../components/SectionIcon.astro';
+import { formatDate, WEEKDAYS } from '../../lib/utils';
+import { parseDaily } from '../../lib/parser';
+import { getSectionMeta } from '../../lib/sections';
 
 export async function getStaticPaths() {
   const reports = await getCollection('daily');
@@ -19,33 +22,97 @@ export async function getStaticPaths() {
 }
 
 const { report, newer, older } = Astro.props;
-const { Content } = await render(report);
+const parsed = parseDaily(report.body);
+const totalNews = parsed.sections.reduce((n, s) => n + s.items.length, 0);
+const totalSources = new Set(
+  parsed.sections.flatMap((s) => s.items.map((i) => i.source).filter(Boolean))
+).size;
 ---
 
-<Base title={`${report.data.title} · AI 日报`} description={`${report.data.title}，AI 行业资讯日报。`}>
-  <article>
-    <header class="report-header">
-      <h1>{report.data.title}</h1>
+<Base
+  title={`${report.data.title} · AI 日报`}
+  description={`${report.data.title}，AI 行业资讯日报。`}
+>
+  <header class="daily-header">
+    <h1>{report.data.title}</h1>
+    <div class="daily-meta">
       <time datetime={report.data.date.toISOString().slice(0, 10)}>
         {formatDate(report.data.date)}
       </time>
-    </header>
-
-    <div class="report-body">
-      <Content />
+      <span><b>{totalNews}</b> 条新闻</span>
+      <span><b>{parsed.sections.length}</b> 个板块</span>
+      <span><b>{totalSources}</b> 个来源</span>
     </div>
+  </header>
 
-    <p class="report-footer-note">
-      本文由 AI 辅助整理，可能存在遗漏或错误，请以各来源原文为准。
-    </p>
-  </article>
+  {
+    parsed.headlines.length > 0 && (
+      <section class="headlines-bar">
+        <h2>今日速览</h2>
+        <ol>
+          {parsed.headlines.map((h) => (
+            <li>{h}</li>
+          ))}
+        </ol>
+      </section>
+    )
+  }
+
+  {
+    parsed.sections.map((section) => {
+      const meta = getSectionMeta(section.title);
+      return (
+        <section class={`section-block color-${meta.color}`}>
+          <h2 class="section-heading">
+            <span class="section-icon">
+              <SectionIcon name={meta.icon} size={17} />
+            </span>
+            <span>{section.title}</span>
+            <span class="section-count">{section.items.length} 条</span>
+          </h2>
+          <div>
+            {section.items.map((item) => (
+              <article class="news-card">
+                <header>
+                  <span class="news-id">#{item.id}</span>
+                  <h3>{item.title}</h3>
+                </header>
+                {item.body.length > 0 && (
+                  <div class="news-body">
+                    {item.body.map((p) => (
+                      <p>{p}</p>
+                    ))}
+                  </div>
+                )}
+                {item.source && (
+                  <p class="news-source">
+                    <span>来源：</span>
+                    {item.source}
+                  </p>
+                )}
+              </article>
+            ))}
+          </div>
+        </section>
+      );
+    })
+  }
+
+  {
+    parsed.disclaimer && (
+      <p class="daily-disclaimer">{parsed.disclaimer}</p>
+    )
+  }
 
   <nav class="report-nav">
     {
       older ? (
         <a class="prev" href={`/daily/${older.id}/`}>
-          <span class="nav-label">较早一期</span>
-          {older.data.date.toISOString().slice(0, 10)}
+          <SectionIcon name="arrowLeft" size={16} />
+          <span>
+            <span class="nav-label">较早一期</span>
+            <span class="nav-date">{older.id} · 周{WEEKDAYS[older.data.date.getDay()]}</span>
+          </span>
         </a>
       ) : (
         <span />
@@ -54,8 +121,11 @@ const { Content } = await render(report);
     {
       newer ? (
         <a class="next" href={`/daily/${newer.id}/`}>
-          <span class="nav-label">较新一期</span>
-          {newer.data.date.toISOString().slice(0, 10)}
+          <span>
+            <span class="nav-label">较新一期</span>
+            <span class="nav-date">{newer.id} · 周{WEEKDAYS[newer.data.date.getDay()]}</span>
+          </span>
+          <SectionIcon name="arrowRight" size={16} />
         </a>
       ) : (
         <span />

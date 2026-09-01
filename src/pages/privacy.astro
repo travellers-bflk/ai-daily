@@ -1,0 +1,68 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="隐私说明 · AI 日报">
+  <article class="privacy-page">
+    <section class="hero">
+      <h1>隐私说明</h1>
+      <p>本站点是纯静态站点。以下是你访问本站时会发生（或不会发生）的事。</p>
+    </section>
+
+    <h2>我们不收集什么</h2>
+    <ul>
+      <li>不设置任何 Cookie</li>
+      <li>不引入任何第三方追踪脚本（Google Analytics、统计 SDK 等）</li>
+      <li>不收集 IP 地址、设备指纹、浏览器型号</li>
+      <li>无任何形式的用户行为埋点</li>
+    </ul>
+
+    <h2>我们如何发布内容</h2>
+    <p>
+      本站所有日报内容由 AI 自动搜集、整理并发布到公开的 GitHub 仓库（<a
+        href="https://github.com/travellers-bflk/ai-daily"
+        target="_blank"
+        rel="noopener">travellers-bflk/ai-daily</a
+      >），通过 Cloudflare Pages 静态托管到本站域名。
+    </p>
+    <p>
+      自动化流程仅在你（本机用户）触发时由本地脚本执行，本机 GitHub 凭据用于推送内容到仓库；这些凭据从不上传到任何地方。
+    </p>
+
+    <h2>本站内容中的隐私边界</h2>
+    <ul>
+      <li>
+        日报推送脚本内置敏感凭据模式扫描（GitHub PAT / AWS / 私钥 / 常见 API key 模式），命中即中止推送。
+      </li>
+      <li>所有内容都来自公开来源（新闻、官方博客、Hugging Face / GitHub 发布页）。</li>
+      <li>不收录任何非公开信息、个人隐私数据、内部泄露资料。</li>
+    </ul>
+
+    <h2>本站托管与第三方</h2>
+    <ul>
+      <li>
+        静态托管：Cloudflare Pages（详见 <a
+          href="https://www.cloudflare.com/privacypolicy/"
+          target="_blank"
+          rel="noopener">Cloudflare 隐私政策</a
+        >）
+      </li>
+      <li>
+        域名解析：Cloudflare DNS（你通过浏览器访问本站时，DNS 查询会被 Cloudflare 处理）
+      </li>
+      <li>
+        浏览器加载资源时可能产生的请求日志由浏览器和 Cloudflare 各自记录，本站点不接触这些日志。
+      </li>
+    </ul>
+
+    <h2>RSS 订阅</h2>
+    <p>
+      本站提供 <a href="/rss.xml">RSS 订阅</a>。使用 RSS 阅读器订阅时，RSS
+      阅读器会定时拉取本仓库 GitHub Pages 上的 rss.xml，不涉及任何用户身份信息。
+    </p>
+
+    <p style="margin-top: 2rem; color: var(--fg-faint); font-size: 0.86rem;">
+      最后更新：2026-09-01
+    </p>
+  </article>
+</Base>

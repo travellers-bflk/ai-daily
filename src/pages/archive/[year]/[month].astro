@@ -1,0 +1,92 @@
+---
+import { getCollection } from 'astro:content';
+import Base from '../../../layouts/Base.astro';
+import { extractHeadlines, WEEKDAYS, formatMonthTitle } from '../../../lib/utils';
+
+export async function getStaticPaths() {
+  const reports = await getCollection('daily');
+  // year-month → reports
+  const tree: Record<string, typeof reports> = {};
+  for (const r of reports) {
+    const d = r.data.date;
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    const key = `${y}-${String(m).padStart(2, '0')}`;
+    (tree[key] ??= []).push(r);
+  }
+  return Object.entries(tree).map(([key, items]) => {
+    const [y, m] = key.split('-').map(Number);
+    return {
+      params: {
+        year: String(y),
+        month: String(m).padStart(2, '0'),
+      },
+      props: { year: y, month: m, items: items.sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf()) },
+    };
+  });
+}
+
+const { year, month, items } = Astro.props;
+const prev = new Date(year, month - 1, 1);
+const next = new Date(year, month + 1, 1);
+const prevExists = await getCollection('daily', (e) => {
+  const d = e.data.date;
+  return d.getFullYear() === prev.getFullYear() && d.getMonth() + 1 === prev.getMonth() + 1;
+}).then((r) => r.length > 0).catch(() => false);
+const nextExists = await getCollection('daily', (e) => {
+  const d = e.data.date;
+  return d.getFullYear() === next.getFullYear() && d.getMonth() + 1 === next.getMonth() + 1;
+}).then((r) => r.length > 0).catch(() => false);
+---
+
+<Base title={`${year} 年 ${month} 月 · AI 日报归档`}>
+  <section class="hero">
+    <h1>{formatMonthTitle(year, month)}</h1>
+    <p>共 {items.length} 期日报</p>
+    <div class="hero-stats">
+      <a href={prevExists ? `/archive/${prev.getFullYear()}/${String(prev.getMonth() + 1).padStart(2, '0')}/` : '#'}>
+        ← {prev.getFullYear()} 年 {prev.getMonth() + 1} 月
+      </a>
+      <a href="/archive/">全部归档</a>
+      <a href={nextExists ? `/archive/${next.getFullYear()}/${String(next.getMonth() + 1).padStart(2, '0')}/` : '#'}>
+        {next.getFullYear()} 年 {next.getMonth() + 1} 月 →
+      </a>
+    </div>
+  </section>
+
+  <div class="day-grid">
+    {
+      items.map((report) => {
+        const d = report.data.date;
+        const headlines = extractHeadlines(report.body);
+        return (
+          <a class="day-card" href={`/daily/${report.id}/`}>
+            <div class="day-card-date">
+              <span class="num">
+                {d.getMonth() + 1}/{d.getDate()}
+              </span>
+              <span class="weekday">周{WEEKDAYS[d.getDay()]}</span>
+            </div>
+            {headlines.length > 0 ? (
+              <ul class="day-card-headlines">
+                {headlines.slice(0, 3).map((h) => <li>{h}</li>)}
+              </ul>
+            ) : (
+              <p class="day-card-empty">暂无速览</p>
+            )}
+          </a>
+        );
+      })
+    }
+  </div>
+</Base>
+
+<style>
+  .hero-stats a {
+    color: var(--fg-secondary);
+  }
+  .hero-stats a:hover {
+    color: var(--accent);
+    text-decoration: none;
+  }
+</style>

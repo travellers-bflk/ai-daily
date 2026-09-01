@@ -1,0 +1,51 @@
+---
+import { getCollection } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+
+const reports = await getCollection('daily');
+const sorted = reports.sort(
+  (a, b) => b.data.date.valueOf() - a.data.date.valueOf()
+);
+
+// 按年 → 月分组
+const tree: Record<number, Record<number, number>> = {};
+for (const r of sorted) {
+  const d = r.data.date;
+  const y = d.getFullYear();
+  const m = d.getMonth() + 1;
+  tree[y] ??= {};
+  tree[y][m] = (tree[y][m] ?? 0) + 1;
+}
+const years = Object.keys(tree)
+  .map(Number)
+  .sort((a, b) => b - a);
+---
+
+<Base title="归档 · AI 日报">
+  <section class="hero">
+    <h1>归档</h1>
+    <p>按月份浏览历史日报。共 {sorted.length} 期。</p>
+  </section>
+
+  <div class="archive-years">
+    {
+      years.map((y) => (
+        <section>
+          <h2 class="month-heading">
+            <span>{y} 年</span>
+          </h2>
+          <div class="archive-months-grid">
+            {Object.keys(tree[y])
+              .map(Number)
+              .sort((a, b) => b - a)
+              .map((m) => (
+                <a href={`/archive/${y}/${String(m).padStart(2, '0')}/`}>
+                  {m} 月 · {tree[y][m]} 期
+                </a>
+              ))}
+          </div>
+        </section>
+      ))
+    }
+  </div>
+</Base>
