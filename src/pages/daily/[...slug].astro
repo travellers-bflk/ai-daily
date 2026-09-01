@@ -3,7 +3,7 @@ import { getCollection } from 'astro:content';
 import Base from '../../layouts/Base.astro';
 import SectionIcon from '../../components/SectionIcon.astro';
 import { formatDate, WEEKDAYS } from '../../lib/utils';
-import { parseDaily } from '../../lib/parser';
+import { parseDaily, renderSourceHtml } from '../../lib/parser';
 import { getSectionMeta } from '../../lib/sections';
 
 export async function getStaticPaths() {
@@ -84,10 +84,13 @@ const totalSources = new Set(
                     ))}
                   </div>
                 )}
-                {item.source && (
+                {(item.source || item.sourceDate) && (
                   <p class="news-source">
-                    <span>来源：</span>
-                    {item.source}
+                    <span class="source-label">来源：</span>
+                    <span
+                      class="source-html"
+                      set:html={renderSourceHtml(item.source, item.sourceDate)}
+                    />
                   </p>
                 )}
               </article>

@@ -12,12 +12,17 @@
  *   【1】新闻标题
  *   正文段落...
  *
- *   来源：XXX
+ *   来源：[媒体名](https://example.com)（8 月 31 日）
  *
  *   【2】...
  *
  *   ---
  *   本文由 AI 辅助整理...
+ *
+ * 来源行格式：
+ *   - 链接为可选：`来源：路透社（8 月 31 日）` 同样合法
+ *   - 多来源用 、 分隔：`来源：[甲](url1)、[乙](url2)（9 月 1 日）`
+ *   - 日期为可选，位于末尾全角括号内
  *
  * 容错：
  *   - 无 ## 板块 → 所有条目归入「综合」板块
@@ -29,7 +34,10 @@ export interface NewsItem {
   id: string;
   title: string;
   body: string[];
+  /** 原始来源串（可能含 markdown 链接与末尾日期括号） */
   source: string;
+  /** 从来源行末尾提取的日期标注，如「8 月 31 日」 */
+  sourceDate: string;
 }
 
 export interface Section {
@@ -41,6 +49,26 @@ export interface ParsedDaily {
   headlines: string[];
   sections: Section[];
   disclaimer: string;
+}
+
+/** 从来源串中剥离末尾（日期）标注（全角/半角括号皆可） */
+function splitSourceDate(source: string): { text: string; date: string } {
+  const m = source.match(/[（(]([^（）()]{2,12})[）)]\s*$/);
+  if (m && /\d/.test(m[1])) {
+    return { text: source.slice(0, m.index).trim().replace(/[、\s]+$/, ''), date: m[1] };
+  }
+  return { text: source, date: '' };
+}
+
+function makeItem(id: string, title: string): NewsItem {
+  return { id, title, body: [], source: '', sourceDate: '' };
+}
+
+function setSource(item: NewsItem, line: string) {
+  const raw = line.replace(/^来源[：:]\s*/, '').trim();
+  const { text, date } = splitSourceDate(raw);
+  item.source = text;
+  item.sourceDate = date;
 }
 
 export function parseDaily(body: string): ParsedDaily {
@@ -106,12 +134,7 @@ export function parseDaily(body: string): ParsedDaily {
     const itemStart = line.match(/^【(\d+)】\s*(.+)$/);
     if (itemStart) {
       pushItem();
-      currentItem = {
-        id: itemStart[1],
-        title: itemStart[2].trim(),
-        body: [],
-        source: '',
-      };
+      currentItem = makeItem(itemStart[1], itemStart[2].trim());
       mode = 'item';
       continue;
     }
@@ -119,7 +142,7 @@ export function parseDaily(body: string): ParsedDaily {
     if (mode === 'item' && currentItem) {
       // 支持全角「：」和半角「:」
       if (line.startsWith('来源：') || line.startsWith('来源:')) {
-        currentItem.source = line.replace(/^来源[：:]\s*/, '').trim();
+        setSource(currentItem, line);
       } else if (line.trim()) {
         currentItem.body.push(line);
       }
@@ -138,10 +161,10 @@ export function parseDaily(body: string): ParsedDaily {
       const m = line.match(/^【(\d+)】\s*(.+)$/);
       if (m) {
         if (cur) allItems.push(cur);
-        cur = { id: m[1], title: m[2].trim(), body: [], source: '' };
+        cur = makeItem(m[1], m[2].trim());
       } else if (cur) {
         if (line.startsWith('来源：') || line.startsWith('来源:')) {
-          cur.source = line.replace(/^来源[：:]\s*/, '').trim();
+          setSource(cur, line);
         } else if (line.trim()) cur.body.push(line);
       }
     }
@@ -150,4 +173,59 @@ export function parseDaily(body: string): ParsedDaily {
   }
 
   return result;
+}
+
+/* ============================================================
+ * 来源行安全渲染：markdown 链接 → HTML
+ * 安全策略：
+ *   1. 文本内容 HTML 转义
+ *   2. URL 仅允许 http/https 协议（阻断 javascript:、data: 等）
+ *   3. 属性值转义（引号）
+ *   4. 外链固定 target=_blank rel="noopener noreferrer"
+ * ============================================================ */
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function isSafeUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+const LINK_RE = /\[([^\]]+)\]\(([^)\s]+)\)/g;
+
+/** 将来源串渲染为安全 HTML：链接可点击，其余文本转义，日期以弱化标签缀尾 */
+export function renderSourceHtml(source: string, date: string): string {
+  const parts: string[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  LINK_RE.lastIndex = 0;
+  while ((m = LINK_RE.exec(source)) !== null) {
+    parts.push(escapeHtml(source.slice(last, m.index)));
+    const [whole, text, url] = m;
+    if (isSafeUrl(url)) {
+      parts.push(
+        `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`
+      );
+    } else {
+      // 不安全或非法 URL：退化为纯文本
+      parts.push(escapeHtml(text));
+    }
+    last = m.index + whole.length;
+  }
+  parts.push(escapeHtml(source.slice(last)));
+  const html = parts.join('');
+  return date
+    ? `${html}<span class="source-date">${escapeHtml(date)}</span>`
+    : html;
 }

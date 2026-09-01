@@ -512,10 +512,33 @@ a:hover {
   color: var(--fg-faint);
 }
 
-.news-card .news-source span {
+.news-card .news-source .source-label {
   color: var(--fg-secondary);
   font-weight: 600;
   margin-right: 0.3rem;
+}
+
+.news-card .news-source .source-html a {
+  color: var(--section-hue, var(--accent));
+  text-decoration: underline;
+  text-decoration-color: var(--section-ring, var(--accent-soft));
+  text-underline-offset: 2px;
+  margin-right: 0.1rem;
+}
+
+.news-card .news-source .source-html a:hover {
+  text-decoration-color: currentColor;
+}
+
+.news-card .news-source .source-date {
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.5rem;
+  border-radius: 5px;
+  background: var(--section-soft, var(--accent-soft));
+  color: var(--fg-secondary);
+  font-weight: 400;
+  font-size: 0.76rem;
+  white-space: nowrap;
 }
 
 /* 板块颜色变量应用 */

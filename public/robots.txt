@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://439952066.xyz/sitemap-index.xml
