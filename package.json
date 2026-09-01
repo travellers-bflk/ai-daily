@@ -1,20 +1,16 @@
 {
-  "name": "personal-tech-notes",
-  "version": "0.1.0",
+  "name": "ai-daily",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro check && astro build",
+    "build": "astro build",
     "preview": "astro preview"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.12",
     "@astrojs/sitemap": "^3.4.2",
     "astro": "^5.13.0"
-  },
-  "devDependencies": {
-    "@astrojs/check": "^0.9.4",
-    "typescript": "^5.9.2"
   }
 }

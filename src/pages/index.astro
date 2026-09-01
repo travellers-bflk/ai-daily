@@ -1,26 +1,65 @@
 ---
-import { getCollection } from "astro:content";
-import BaseLayout from "../layouts/BaseLayout.astro";
-import PostCard from "../components/PostCard.astro";
+import { getCollection } from 'astro:content';
+import Base from '../layouts/Base.astro';
+import { extractHeadlines, formatMonth, WEEKDAYS } from '../lib/utils';
 
-const posts = (await getCollection("posts", ({ data }) => !data.draft)).sort(
-  (a, b) => b.data.publishedAt.valueOf() - a.data.publishedAt.valueOf(),
+const reports = (await getCollection('daily')).sort(
+  (a, b) => b.data.date.valueOf() - a.data.date.valueOf()
 );
+
+// 按月分组
+const groups: { month: string; items: typeof reports }[] = [];
+for (const report of reports) {
+  const month = formatMonth(report.data.date);
+  const last = groups[groups.length - 1];
+  if (last && last.month === month) {
+    last.items.push(report);
+  } else {
+    groups.push({ month, items: [report] });
+  }
+}
+
+function pad(n: number) {
+  return String(n).padStart(2, '0');
+}
 ---
 
-<BaseLayout>
-  <section class="home-intro">
-    <p class="eyebrow">个人技术笔记</p>
-    <h1>个人技术笔记</h1>
-    <p>关于 Vibe Coding、计算机知识，以及还没被归类的想法。</p>
+<Base title="AI 日报 · 每日 AI 行业资讯">
+  <section class="hero">
+    <h1>AI 日报</h1>
+    <p>每日 AI 行业资讯，由 AI 搜集整理。信息密度优先，克制客观。</p>
   </section>
-  <section class="post-section" aria-labelledby="recent-posts">
-    <div class="section-heading">
-      <h2 id="recent-posts">最近文章</h2>
-      <a href="/posts/">全部文章</a>
-    </div>
-    <div class="post-list">
-      {posts.slice(0, 5).map((post) => <PostCard post={post} />)}
-    </div>
-  </section>
-</BaseLayout>
+
+  {
+    groups.length === 0 && <p class="empty-tip">暂无日报，敬请期待。</p>
+  }
+
+  {
+    groups.map((group) => (
+      <section class="month-group">
+        <h2 class="month-heading">{group.month}</h2>
+        {group.items.map((report) => {
+          const d = report.data.date;
+          const headlines = extractHeadlines(report.body);
+          return (
+            <article class="report-item">
+              <a class="report-date" href={`/daily/${report.id}/`}>
+                <span>
+                  {d.getFullYear()}-{pad(d.getMonth() + 1)}-{pad(d.getDate())}
+                </span>
+                <span class="weekday">周{WEEKDAYS[d.getDay()]}</span>
+              </a>
+              {headlines.length > 0 && (
+                <ul class="headline-list">
+                  {headlines.map((h) => (
+                    <li>{h}</li>
+                  ))}
+                </ul>
+              )}
+            </article>
+          );
+        })}
+      </section>
+    ))
+  }
+</Base>

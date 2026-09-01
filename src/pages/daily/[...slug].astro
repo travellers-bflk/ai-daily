@@ -1,0 +1,65 @@
+---
+import { getCollection, render } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import { formatDate } from '../../lib/utils';
+
+export async function getStaticPaths() {
+  const reports = await getCollection('daily');
+  const sorted = reports.sort(
+    (a, b) => b.data.date.valueOf() - a.data.date.valueOf()
+  );
+  return sorted.map((report, i) => ({
+    params: { slug: report.id },
+    props: {
+      report,
+      newer: sorted[i - 1] ?? null,
+      older: sorted[i + 1] ?? null,
+    },
+  }));
+}
+
+const { report, newer, older } = Astro.props;
+const { Content } = await render(report);
+---
+
+<Base title={`${report.data.title} · AI 日报`} description={`${report.data.title}，AI 行业资讯日报。`}>
+  <article>
+    <header class="report-header">
+      <h1>{report.data.title}</h1>
+      <time datetime={report.data.date.toISOString().slice(0, 10)}>
+        {formatDate(report.data.date)}
+      </time>
+    </header>
+
+    <div class="report-body">
+      <Content />
+    </div>
+
+    <p class="report-footer-note">
+      本文由 AI 辅助整理，可能存在遗漏或错误，请以各来源原文为准。
+    </p>
+  </article>
+
+  <nav class="report-nav">
+    {
+      older ? (
+        <a class="prev" href={`/daily/${older.id}/`}>
+          <span class="nav-label">较早一期</span>
+          {older.data.date.toISOString().slice(0, 10)}
+        </a>
+      ) : (
+        <span />
+      )
+    }
+    {
+      newer ? (
+        <a class="next" href={`/daily/${newer.id}/`}>
+          <span class="nav-label">较新一期</span>
+          {newer.data.date.toISOString().slice(0, 10)}
+        </a>
+      ) : (
+        <span />
+      )
+    }
+  </nav>
+</Base>

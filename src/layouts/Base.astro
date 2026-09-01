@@ -1,0 +1,45 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const {
+  title,
+  description = '每日 AI 行业资讯日报，由 AI 搜集整理发布，覆盖模型发布、产品动态、融资监管与技术观点。',
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="alternate" type="application/rss+xml" title="AI 日报 RSS" href="/rss.xml" />
+    <meta name="generator" content={Astro.generator} />
+    <meta name="description" content={description} />
+    <title>{title}</title>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="wrap header-inner">
+        <a class="site-title" href="/">AI 日报<span class="site-title-dot">·</span><span class="site-title-sub">AI Daily</span></a>
+        <nav class="site-nav">
+          <a href="/">归档</a>
+          <a href="/rss.xml" target="_blank" rel="noopener">RSS</a>
+        </nav>
+      </div>
+    </header>
+    <main class="wrap main-area">
+      <slot />
+    </main>
+    <footer class="site-footer">
+      <div class="wrap">
+        <p>内容由 AI 辅助搜集整理，可能存在遗漏或错误，请以各来源原文为准。</p>
+      </div>
+    </footer>
+  </body>
+</html>
