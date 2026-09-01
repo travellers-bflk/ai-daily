@@ -117,8 +117,9 @@ export function parseDaily(body: string): ParsedDaily {
     }
 
     if (mode === 'item' && currentItem) {
+      // 支持全角「：」和半角「:」
       if (line.startsWith('来源：') || line.startsWith('来源:')) {
-        currentItem.source = line.replace(/^来源[::]\s*/, '').trim();
+        currentItem.source = line.replace(/^来源[：:]\s*/, '').trim();
       } else if (line.trim()) {
         currentItem.body.push(line);
       }
@@ -140,7 +141,7 @@ export function parseDaily(body: string): ParsedDaily {
         cur = { id: m[1], title: m[2].trim(), body: [], source: '' };
       } else if (cur) {
         if (line.startsWith('来源：') || line.startsWith('来源:')) {
-          cur.source = line.replace(/^来源[::]\s*/, '').trim();
+          cur.source = line.replace(/^来源[：:]\s*/, '').trim();
         } else if (line.trim()) cur.body.push(line);
       }
     }
