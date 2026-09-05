@@ -8,7 +8,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "check": "astro check",
-    "validate": "tsx scripts/validate-content.mjs"
+    "validate": "node scripts/validate-content.mjs"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.12",
@@ -17,7 +17,6 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.4",
-    "tsx": "^4.19.2",
     "typescript": "^5.9.2"
   }
 }
