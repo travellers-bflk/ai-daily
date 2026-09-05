@@ -46,25 +46,5 @@ export function getSectionMeta(title: string): SectionMeta {
   return palette[hash(title) % palette.length];
 }
 
-export const COLOR_VARS: Record<string, { hue: string; soft: string; ring: string }> = {
-  orange: { hue: '#ea580c', soft: '#fff3ec', ring: '#fed7aa' },
-  teal: { hue: '#0d9488', soft: '#ecfdf8', ring: '#99eede' },
-  indigo: { hue: '#4f46e5', soft: '#eef0ff', ring: '#c4c9ff' },
-  green: { hue: '#16a34a', soft: '#ecfdf3', ring: '#bbf7d0' },
-  blue: { hue: '#2563eb', soft: '#eaf2ff', ring: '#bfd6ff' },
-  purple: { hue: '#9333ea', soft: '#f6edff', ring: '#e2c8ff' },
-  amber: { hue: '#d97706', soft: '#fef5e7', ring: '#fcd9a4' },
-  slate: { hue: '#475569', soft: '#eef1f5', ring: '#cbd5e1' },
-  gray: { hue: '#6b7280', soft: '#f1f2f4', ring: '#d1d5db' },
-  pink: { hue: '#db2777', soft: '#fceaf3', ring: '#f9b4d6' },
-  cyan: { hue: '#0891b2', soft: '#e6f8fc', ring: '#a5e3f0' },
-  lime: { hue: '#65a30d', soft: '#f4fae6', ring: '#d9efb0' },
-  rose: { hue: '#e11d48', soft: '#fdecef', ring: '#fbb6c4' },
-  violet: { hue: '#7c3aed', soft: '#f1ebff', ring: '#d6c0ff' },
-  sky: { hue: '#0284c7', soft: '#e7f4fd', ring: '#b3dffc' },
-  fuchsia: { hue: '#c026d3', soft: '#faeafc', ring: '#f1b8f5' },
-};
-
-export function colorVars(name: string) {
-  return COLOR_VARS[name] || COLOR_VARS.gray;
-}
+// 注：板块配色的实际生效实现在 global.css 的 .section-block.color-* 类，
+// 这里只需提供 color 名称，无需在 TS 侧维护第二份色值表。

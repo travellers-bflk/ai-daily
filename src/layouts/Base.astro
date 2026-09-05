@@ -4,12 +4,22 @@ import '../styles/global.css';
 interface Props {
   title: string;
   description?: string;
+  /** 站内规范路径（如 /daily/2026-09-05/），用于 canonical 与 og:url；缺省视为首页 */
+  canonicalPath?: string;
+  /** og:type：首页 website，日报详情 article */
+  ogType?: 'website' | 'article';
 }
 
 const {
   title,
   description = '每日 AI 行业资讯日报，由 AI 搜集整理发布。',
+  canonicalPath = '/',
+  ogType = 'website',
 } = Astro.props;
+
+const site = Astro.site ?? new URL('https://439952066.xyz');
+const canonicalUrl = new URL(canonicalPath, site);
+const ogImageUrl = new URL('/og-image.png', site);
 ---
 
 <!doctype html>
@@ -19,9 +29,26 @@ const {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="alternate" type="application/rss+xml" title="AI 日报 RSS" href="/rss.xml" />
+    <link rel="canonical" href={canonicalUrl} />
     <meta name="generator" content={Astro.generator} />
     <meta name="description" content={description} />
+    <meta name="theme-color" content="#fafaf7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f1114" media="(prefers-color-scheme: dark)" />
     <title>{title}</title>
+
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:type" content={ogType} />
+    <meta property="og:site_name" content="AI 日报" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:image" content={ogImageUrl} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImageUrl} />
   </head>
   <body>
     <header class="site-header">

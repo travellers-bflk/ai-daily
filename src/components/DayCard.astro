@@ -1,0 +1,35 @@
+---
+import { extractHeadlines, WEEKDAYS } from '../lib/utils';
+
+interface Props {
+  report: any; // CollectionEntry<'daily'>；用 any 规避 astro:content 类型在组件层的导入限制
+}
+
+const { report } = Astro.props;
+const d = report.data.date;
+// 统一 UTC getter（frontmatter 日期为 UTC 午夜），与 formatDate/isoDate 同基准
+const month = d.getUTCMonth() + 1;
+const day = d.getUTCDate();
+const weekday = d.getUTCDay();
+const headlines = extractHeadlines(report.body);
+---
+
+<a class="day-card" href={`/daily/${report.id}/`}>
+  <div class="day-card-date">
+    <span class="num">
+      {month}/{day}
+    </span>
+    <span class="weekday">周{WEEKDAYS[weekday]}</span>
+  </div>
+  {
+    headlines.length > 0 ? (
+      <ul class="day-card-headlines">
+        {headlines.slice(0, 3).map((h) => (
+          <li>{h}</li>
+        ))}
+      </ul>
+    ) : (
+      <p class="day-card-empty">暂无速览</p>
+    )
+  }
+</a>

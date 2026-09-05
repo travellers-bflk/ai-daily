@@ -1,16 +1,18 @@
 ---
 import { getCollection } from 'astro:content';
 import Base from '../../../layouts/Base.astro';
-import { extractHeadlines, WEEKDAYS, formatMonthTitle } from '../../../lib/utils';
+import DayCard from '../../../components/DayCard.astro';
+import { WEEKDAYS, formatMonthTitle } from '../../../lib/utils';
 
 export async function getStaticPaths() {
   const reports = await getCollection('daily');
-  // year-month → reports
+  // year-month → reports（key 形如 "2026-09"）
   const tree: Record<string, typeof reports> = {};
   for (const r of reports) {
     const d = r.data.date;
-    const y = d.getFullYear();
-    const m = d.getMonth() + 1;
+    // 统一 UTC getter（frontmatter 日期为 UTC 午夜）
+    const y = d.getUTCFullYear();
+    const m = d.getUTCMonth() + 1;
     const key = `${y}-${String(m).padStart(2, '0')}`;
     (tree[key] ??= []).push(r);
   }
@@ -21,62 +23,67 @@ export async function getStaticPaths() {
         year: String(y),
         month: String(m).padStart(2, '0'),
       },
-      props: { year: y, month: m, items: items.sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf()) },
+      props: {
+        year: y,
+        month: m,
+        items: items.sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf()),
+        // 全量月份表，供上/下一月导航做存在性判断
+        monthKeys: Object.keys(tree),
+      },
     };
   });
 }
 
-const { year, month, items } = Astro.props;
-const prev = new Date(year, month - 1, 1);
-const next = new Date(year, month + 1, 1);
-const prevExists = await getCollection('daily', (e) => {
-  const d = e.data.date;
-  return d.getFullYear() === prev.getFullYear() && d.getMonth() + 1 === prev.getMonth() + 1;
-}).then((r) => r.length > 0).catch(() => false);
-const nextExists = await getCollection('daily', (e) => {
-  const d = e.data.date;
-  return d.getFullYear() === next.getFullYear() && d.getMonth() + 1 === next.getMonth() + 1;
-}).then((r) => r.length > 0).catch(() => false);
+const { year, month, items, monthKeys } = Astro.props;
+
+// month 为 1-based，Date 构造器月份为 0-based：上一个月 = month-2，下一个月 = month
+const prev = new Date(year, month - 2, 1);
+const next = new Date(year, month, 1);
+const monthKey = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+const prevExists = monthKeys.includes(monthKey(prev));
+const nextExists = monthKeys.includes(monthKey(next));
+
+const navClass = (exists: boolean) =>
+  exists ? 'hero-stats' : 'hero-stats nav-disabled';
 ---
 
 <Base title={`${year} 年 ${month} 月 · AI 日报归档`}>
   <section class="hero">
     <h1>{formatMonthTitle(year, month)}</h1>
     <p>共 {items.length} 期日报</p>
-    <div class="hero-stats">
-      <a href={prevExists ? `/archive/${prev.getFullYear()}/${String(prev.getMonth() + 1).padStart(2, '0')}/` : '#'}>
-        ← {prev.getFullYear()} 年 {prev.getMonth() + 1} 月
-      </a>
+    <div class={navClass(prevExists)}>
+      {
+        prevExists ? (
+          <a href={`/archive/${prev.getFullYear()}/${String(prev.getMonth() + 1).padStart(2, '0')}/`}>
+            ← {prev.getFullYear()} 年 {prev.getMonth() + 1} 月
+          </a>
+        ) : (
+          <span>
+            ← {prev.getFullYear()} 年 {prev.getMonth() + 1} 月
+          </span>
+        )
+      }
       <a href="/archive/">全部归档</a>
-      <a href={nextExists ? `/archive/${next.getFullYear()}/${String(next.getMonth() + 1).padStart(2, '0')}/` : '#'}>
-        {next.getFullYear()} 年 {next.getMonth() + 1} 月 →
-      </a>
+      {
+        nextExists ? (
+          <a href={`/archive/${next.getFullYear()}/${String(next.getMonth() + 1).padStart(2, '0')}/`}>
+            {next.getFullYear()} 年 {next.getMonth() + 1} 月 →
+          </a>
+        ) : (
+          <span>
+            {next.getFullYear()} 年 {next.getMonth() + 1} 月 →
+          </span>
+        )
+      }
     </div>
   </section>
 
   <div class="day-grid">
     {
-      items.map((report) => {
-        const d = report.data.date;
-        const headlines = extractHeadlines(report.body);
-        return (
-          <a class="day-card" href={`/daily/${report.id}/`}>
-            <div class="day-card-date">
-              <span class="num">
-                {d.getMonth() + 1}/{d.getDate()}
-              </span>
-              <span class="weekday">周{WEEKDAYS[d.getDay()]}</span>
-            </div>
-            {headlines.length > 0 ? (
-              <ul class="day-card-headlines">
-                {headlines.slice(0, 3).map((h) => <li>{h}</li>)}
-              </ul>
-            ) : (
-              <p class="day-card-empty">暂无速览</p>
-            )}
-          </a>
-        );
-      })
+      items.map((report) => (
+        <DayCard report={report} />
+      ))
     }
   </div>
 </Base>
@@ -88,5 +95,9 @@ const nextExists = await getCollection('daily', (e) => {
   .hero-stats a:hover {
     color: var(--accent);
     text-decoration: none;
+  }
+  .hero-stats :global(.nav-disabled) span,
+  .hero-stats.nav-disabled span {
+    color: var(--fg-mute);
   }
 </style>

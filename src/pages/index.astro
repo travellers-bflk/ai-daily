@@ -1,7 +1,8 @@
 ---
 import { getCollection } from 'astro:content';
 import Base from '../layouts/Base.astro';
-import { extractHeadlines, WEEKDAYS } from '../lib/utils';
+import DayCard from '../components/DayCard.astro';
+import { extractHeadlines } from '../lib/utils';
 
 const reports = (await getCollection('daily')).sort(
   (a, b) => b.data.date.valueOf() - a.data.date.valueOf()
@@ -19,17 +20,20 @@ for (const report of reports) {
   const last = groups[groups.length - 1];
   if (
     last &&
-    last.year === d.getFullYear() &&
-    last.month === d.getMonth() + 1
+    last.year === d.getUTCFullYear() &&
+    last.month === d.getUTCMonth() + 1
   ) {
     last.items.push(report);
   } else {
-    groups.push({ year: d.getFullYear(), month: d.getMonth() + 1, items: [report] });
+    groups.push({ year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, items: [report] });
   }
 }
 
+// 首页只展示最近 2 个月，更早的走归档页
+const visibleGroups = groups.slice(0, 2);
+
 const totalCount = reports.length;
-const allHeadlines = reports.flatMap((r) => extractHeadlines(r.body));
+const allHeadlines = reports.flatMap((r) => extractHeadlines(r.body ?? ''));
 ---
 
 <Base title="AI 日报 · 每日 AI 行业资讯">
@@ -45,7 +49,7 @@ const allHeadlines = reports.flatMap((r) => extractHeadlines(r.body));
   {groups.length === 0 && <p class="empty-tip">暂无日报，敬请期待。</p>}
 
   {
-    groups.map((group) => {
+    visibleGroups.map((group) => {
       const monthLabel = `${group.year} 年 ${group.month} 月`;
       const archiveHref = `/archive/${group.year}/${String(group.month).padStart(2, '0')}/`;
       return (
@@ -55,29 +59,9 @@ const allHeadlines = reports.flatMap((r) => extractHeadlines(r.body));
             <a href={archiveHref} class="archive-link">查看全部</a>
           </h2>
           <div class="day-grid">
-            {group.items.map((report) => {
-              const d = report.data.date;
-              const headlines = extractHeadlines(report.body);
-              return (
-                <a class="day-card" href={`/daily/${report.id}/`}>
-                  <div class="day-card-date">
-                    <span class="num">
-                      {d.getMonth() + 1}/{d.getDate()}
-                    </span>
-                    <span class="weekday">周{WEEKDAYS[d.getDay()]}</span>
-                  </div>
-                  {headlines.length > 0 ? (
-                    <ul class="day-card-headlines">
-                      {headlines.slice(0, 3).map((h) => (
-                        <li>{h}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p class="day-card-empty">暂无速览</p>
-                  )}
-                </a>
-              );
-            })}
+            {group.items.map((report) => (
+              <DayCard report={report} />
+            ))}
           </div>
         </section>
       );

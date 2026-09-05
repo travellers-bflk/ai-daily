@@ -89,18 +89,19 @@ export function parseDaily(body: string): ParsedDaily {
     currentSection = null;
   };
 
-  for (const raw of lines) {
-    const line = raw.trimEnd();
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trimEnd();
 
-    // 分隔线（文末声明前）
+    // 分隔线：向前看第一条非空行——若为「## 」标题则视为板块分隔，否则视为文末声明起始
     if (line === '---') {
-      if (mode === 'disclaimer' || mode === 'idle') {
-        mode = 'disclaimer';
-        continue;
-      }
-      // 板块内的 hr 视为板块结束
+      const nextNonEmpty =
+        lines.slice(i + 1).find((l) => l.trim() !== '') ?? '';
       pushSection();
-      mode = 'idle';
+      if (nextNonEmpty.trimStart().startsWith('## ')) {
+        mode = 'idle';
+      } else {
+        mode = 'disclaimer';
+      }
       continue;
     }
 
@@ -184,7 +185,7 @@ export function parseDaily(body: string): ParsedDaily {
  *   4. 外链固定 target=_blank rel="noopener noreferrer"
  * ============================================================ */
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -202,29 +203,30 @@ function isSafeUrl(url: string): boolean {
   }
 }
 
-const LINK_RE = /\[([^\]]+)\]\(([^)\s]+)\)/g;
+/** 行内 markdown 安全渲染：整体 HTML 转义 + [文字](http/https url) 链接 + **粗体** */
+export function renderInlineMarkdown(text: string): string {
+  // 先整体转义（链接 URL 中的 & 等已被转义，恰好是属性值的安全形式）
+  let out = escapeHtml(text);
+  // 链接：协议白名单校验用还原后的 URL；href 已随整体转义，无需再处理
+  out = out.replace(
+    /\[([^\]]+)\]\(([^)\s]+)\)/g,
+    (_m, label: string, href: string) => {
+      const raw = href.replace(/&amp;/g, '&');
+      if (isSafeUrl(raw)) {
+        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+      }
+      // 不安全或非法 URL：退化为纯文本
+      return label;
+    }
+  );
+  // **粗体**
+  out = out.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  return out;
+}
 
 /** 将来源串渲染为安全 HTML：链接可点击，其余文本转义，日期以弱化标签缀尾 */
 export function renderSourceHtml(source: string, date: string): string {
-  const parts: string[] = [];
-  let last = 0;
-  let m: RegExpExecArray | null;
-  LINK_RE.lastIndex = 0;
-  while ((m = LINK_RE.exec(source)) !== null) {
-    parts.push(escapeHtml(source.slice(last, m.index)));
-    const [whole, text, url] = m;
-    if (isSafeUrl(url)) {
-      parts.push(
-        `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`
-      );
-    } else {
-      // 不安全或非法 URL：退化为纯文本
-      parts.push(escapeHtml(text));
-    }
-    last = m.index + whole.length;
-  }
-  parts.push(escapeHtml(source.slice(last)));
-  const html = parts.join('');
+  const html = renderInlineMarkdown(source);
   return date
     ? `${html}<span class="source-date">${escapeHtml(date)}</span>`
     : html;

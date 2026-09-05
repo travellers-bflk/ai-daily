@@ -2,8 +2,8 @@
 import { getCollection } from 'astro:content';
 import Base from '../../layouts/Base.astro';
 import SectionIcon from '../../components/SectionIcon.astro';
-import { formatDate, WEEKDAYS } from '../../lib/utils';
-import { parseDaily, renderSourceHtml } from '../../lib/parser';
+import { formatDate, WEEKDAYS, isoDate } from '../../lib/utils';
+import { parseDaily, renderSourceHtml, renderInlineMarkdown } from '../../lib/parser';
 import { getSectionMeta } from '../../lib/sections';
 
 export async function getStaticPaths() {
@@ -22,16 +22,28 @@ export async function getStaticPaths() {
 }
 
 const { report, newer, older } = Astro.props;
-const parsed = parseDaily(report.body);
+const parsed = parseDaily(report.body ?? '');
 const totalNews = parsed.sections.reduce((n, s) => n + s.items.length, 0);
+// 去重媒体数：按「、」拆分来源串 → 提取链接文字（无链接取原文）→ 去重
 const totalSources = new Set(
-  parsed.sections.flatMap((s) => s.items.map((i) => i.source).filter(Boolean))
+  parsed.sections
+    .flatMap((s) => s.items.map((i) => i.source))
+    .flatMap((src) => src.split('、'))
+    .map((part) => part.match(/\[([^\]]+)\]/)?.[1] ?? part.trim())
+    .filter(Boolean)
 ).size;
+const canonicalPath = `/daily/${report.id}/`;
+const pageDescription =
+  parsed.headlines.length > 0
+    ? parsed.headlines.slice(0, 3).join('；')
+    : `${report.data.title}，AI 行业资讯日报。`;
 ---
 
 <Base
   title={`${report.data.title} · AI 日报`}
-  description={`${report.data.title}，AI 行业资讯日报。`}
+  description={pageDescription}
+  canonicalPath={canonicalPath}
+  ogType="article"
 >
   <header class="daily-header">
     <h1>{report.data.title}</h1>
@@ -80,7 +92,7 @@ const totalSources = new Set(
                 {item.body.length > 0 && (
                   <div class="news-body">
                     {item.body.map((p) => (
-                      <p>{p}</p>
+                      <p set:html={renderInlineMarkdown(p)} />
                     ))}
                   </div>
                 )}
@@ -114,7 +126,7 @@ const totalSources = new Set(
           <SectionIcon name="arrowLeft" size={16} />
           <span>
             <span class="nav-label">较早一期</span>
-            <span class="nav-date">{older.id} · 周{WEEKDAYS[older.data.date.getDay()]}</span>
+            <span class="nav-date">{older.id} · 周{WEEKDAYS[older.data.date.getUTCDay()]}</span>
           </span>
         </a>
       ) : (
@@ -126,7 +138,7 @@ const totalSources = new Set(
         <a class="next" href={`/daily/${newer.id}/`}>
           <span>
             <span class="nav-label">较新一期</span>
-            <span class="nav-date">{newer.id} · 周{WEEKDAYS[newer.data.date.getDay()]}</span>
+            <span class="nav-date">{newer.id} · 周{WEEKDAYS[newer.data.date.getUTCDay()]}</span>
           </span>
           <SectionIcon name="arrowRight" size={16} />
         </a>

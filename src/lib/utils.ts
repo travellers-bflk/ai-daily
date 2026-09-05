@@ -1,10 +1,15 @@
+import { parseDaily } from './parser';
+
 export const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
 
 export function formatDate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day} 周${WEEKDAYS[d.getDay()]}`;
+  // frontmatter 日期解析为 UTC 午夜；统一用 UTC getter 与 isoDate 保持同一基准，
+  // 避免在 UTC 负偏移的构建环境显示成前一天
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth();
+  const day = d.getUTCDate();
+  const wd = d.getUTCDay();
+  return `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')} 周${WEEKDAYS[wd]}`;
 }
 
 export function formatMonthTitle(year: number, month: number): string {
@@ -15,15 +20,9 @@ export function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** 从 markdown 正文解析「今日速览」头条列表（首页卡片预览用） */
+/** 从日报正文解析「今日速览」头条列表（单一实现，复用 parser 状态机） */
 export function extractHeadlines(body: string): string[] {
-  const match = body.match(/##\s*今日速览\s*\n([\s\S]*?)(?=\n##\s|$)/);
-  if (!match) return [];
-  return match[1]
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => /^\d+[.、]\s*\S/.test(line))
-    .map((line) => line.replace(/^\d+[.、]\s*/, ''));
+  return parseDaily(body).headlines;
 }
 
 /** 计算某年某月有多少天 */
