@@ -13,15 +13,28 @@
 
 import { execSync } from 'node:child_process';
 import {
-  rmSync, mkdirSync, writeFileSync, readdirSync, renameSync, existsSync,
+  rmSync, mkdirSync, writeFileSync, readdirSync, renameSync, existsSync, statSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve, basename } from 'node:path';
 
 const REPO = 'travellers-bflk/ai-daily';
-const work = process.argv[2] || 'D:/ai/workbuddy/other/.daily-work';
+// 注：默认值是每日自动化任务依赖的固定快照目录，改动前需同步调整调用方；
+// 可用命令行参数覆盖（覆盖值同样受下方 .daily-work 目录名校验约束）。
+const DEFAULT_WORK = 'D:/ai/workbuddy/other/.daily-work';
+const work = resolve(process.argv[2] || DEFAULT_WORK);
 const repoTarget = join(work, 'repo');
 
-// 1. 清理工作目录（保留安全：仅删除本脚本专属的 .daily-work）
+// 1. 清理工作目录。本脚本会递归删除整个 work，因此只接受专属的 .daily-work 目录，
+//    避免误传路径（如 node fetch-repo.mjs D:/ai）时摧毁无关数据。
+if (basename(work) !== '.daily-work') {
+  console.error(`拒绝删除：工作目录名必须是 .daily-work，收到 ${work}`);
+  console.error('本脚本会递归删除整个工作目录，为防止误删不接受其他路径。');
+  process.exit(1);
+}
+if (existsSync(work) && !statSync(work).isDirectory()) {
+  console.error(`拒绝删除：${work} 已存在但不是目录`);
+  process.exit(1);
+}
 rmSync(work, { recursive: true, force: true });
 mkdirSync(work, { recursive: true });
 

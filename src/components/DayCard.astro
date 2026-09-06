@@ -1,8 +1,9 @@
 ---
+import type { CollectionEntry } from 'astro:content';
 import { extractHeadlines, WEEKDAYS } from '../lib/utils';
 
 interface Props {
-  report: any; // CollectionEntry<'daily'>；用 any 规避 astro:content 类型在组件层的导入限制
+  report: CollectionEntry<'daily'>;
 }
 
 const { report } = Astro.props;
@@ -11,7 +12,7 @@ const d = report.data.date;
 const month = d.getUTCMonth() + 1;
 const day = d.getUTCDate();
 const weekday = d.getUTCDay();
-const headlines = extractHeadlines(report.body);
+const headlines = extractHeadlines(report.body ?? '');
 ---
 
 <a class="day-card" href={`/daily/${report.id}/`}>

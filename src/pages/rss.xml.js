@@ -13,7 +13,7 @@ export async function GET(context) {
     description: '每日 AI 行业资讯，由 AI 搜集整理发布。信息密度优先，克制客观。',
     site: context.site,
     items: reports.map((report) => {
-      const headlines = extractHeadlines(report.body);
+      const headlines = extractHeadlines(report.body ?? '');
       // RSS description 按 HTML 渲染：速览输出为列表（@astrojs/rss 自动 CDATA 包裹）
       const description = headlines.length
         ? `<ul>${headlines.map((h) => `<li>${escapeHtml(h)}</li>`).join('')}</ul>`
