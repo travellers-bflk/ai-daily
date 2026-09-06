@@ -43,23 +43,20 @@ const monthKey = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 const prevExists = monthKeys.includes(monthKey(prev));
 const nextExists = monthKeys.includes(monthKey(next));
-
-const navClass = (exists: boolean) =>
-  exists ? 'hero-stats' : 'hero-stats nav-disabled';
 ---
 
 <Base title={`${year} 年 ${month} 月 · AI 日报归档`}>
   <section class="hero">
     <h1>{formatMonthTitle(year, month)}</h1>
     <p>共 {items.length} 期日报</p>
-    <div class={navClass(prevExists)}>
+    <div class="hero-stats">
       {
         prevExists ? (
           <a href={`/archive/${prev.getFullYear()}/${String(prev.getMonth() + 1).padStart(2, '0')}/`}>
             ← {prev.getFullYear()} 年 {prev.getMonth() + 1} 月
           </a>
         ) : (
-          <span>
+          <span class="nav-disabled">
             ← {prev.getFullYear()} 年 {prev.getMonth() + 1} 月
           </span>
         )
@@ -71,7 +68,7 @@ const navClass = (exists: boolean) =>
             {next.getFullYear()} 年 {next.getMonth() + 1} 月 →
           </a>
         ) : (
-          <span>
+          <span class="nav-disabled">
             {next.getFullYear()} 年 {next.getMonth() + 1} 月 →
           </span>
         )
@@ -96,8 +93,8 @@ const navClass = (exists: boolean) =>
     color: var(--accent);
     text-decoration: none;
   }
-  .hero-stats :global(.nav-disabled) span,
-  .hero-stats.nav-disabled span {
+  .hero-stats .nav-disabled {
     color: var(--fg-mute);
+    cursor: default;
   }
 </style>

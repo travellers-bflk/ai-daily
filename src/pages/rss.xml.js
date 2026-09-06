@@ -1,7 +1,6 @@
 import rss from '@astrojs/rss';
 import { getCollection } from 'astro:content';
 import { extractHeadlines } from '../lib/utils';
-import { escapeHtml } from '../lib/parser';
 
 export async function GET(context) {
   const reports = (await getCollection('daily')).sort(
@@ -14,9 +13,10 @@ export async function GET(context) {
     site: context.site,
     items: reports.map((report) => {
       const headlines = extractHeadlines(report.body ?? '');
-      // RSS description 按 HTML 渲染：速览输出为列表（@astrojs/rss 自动 CDATA 包裹）
+      // @astrojs/rss 无法输出 CDATA（xmlOptions 未设 cdataPropName），HTML 标签会被
+      // 转义成字面量；转义也由 XMLBuilder 独自负责，此处不得再调 escapeHtml，否则双重转义。
       const description = headlines.length
-        ? `<ul>${headlines.map((h) => `<li>${escapeHtml(h)}</li>`).join('')}</ul>`
+        ? headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')
         : '每日 AI 行业资讯日报。';
       return {
         title: report.data.title,
