@@ -24,6 +24,54 @@ if (files.length === 0) {
 
 const errors = [];
 
+/**
+ * 逐字符走一遍 markdown 链接并用深度计数定位右括号。
+ * 刻意不复用渲染器（parser.ts INLINE_LINK_RE）的正则：两套不同算法互为制衡，
+ * 渲染器正则若有缺陷，这里不会跟着一起漏检。
+ *
+ * 渲染器只支持一层平衡括号，更深的嵌套会被截断成坏 href，因此这里提前报出来。
+ */
+function checkLinksIn(src, report) {
+  for (const m of src.matchAll(/\[([^\]]+)\]\(/g)) {
+    const label = m[1];
+    const urlStart = m.index + m[0].length;
+    let depth = 1;
+    let maxDepth = 1;
+    let end = -1;
+    for (let i = urlStart; i < src.length; i++) {
+      const ch = src[i];
+      if (/\s/.test(ch)) break; // URL 中不允许空白，遇到即视为未闭合
+      if (ch === '(') {
+        depth++;
+        if (depth > maxDepth) maxDepth = depth;
+      } else if (ch === ')') {
+        depth--;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+    if (end < 0) {
+      report(`链接括号未闭合: [${label}](…`);
+      continue;
+    }
+    const url = src.slice(urlStart, end);
+    if (maxDepth > 2) {
+      report(`链接 URL 括号嵌套超过一层，渲染器会截断: [${label}](${url})`);
+    }
+    if (!/^https?:\/\//.test(url)) {
+      report(`非 http(s) 链接: ${url}`);
+    }
+    // 「一个链接一个来源」：剥掉（转载：…）括号内的出处说明后再检查顿号，
+    // `[腾讯新闻（转载：工信部、新华社报道）]` 合法，`[Hugging Face、腾讯新闻]` 违规
+    const labelOutsideParens = label.replace(/[（(][^）)]*[）)]/g, '');
+    if (labelOutsideParens.includes('、')) {
+      report(`多个媒体名共用一个链接: [${label}](${url})`);
+    }
+  }
+}
+
 for (const f of files) {
   const raw = readFileSync(join(dir, f), 'utf8');
   // 剥离 frontmatter（与 Astro 行为一致）
@@ -75,19 +123,7 @@ for (const f of files) {
       /[（(]\d{1,2}\s*月\s*\d{1,2}\s*日[）)]\s*$/.test(src.trim()),
       `【${id}】来源行末尾缺少（M 月 D 日）日期标注`
     );
-    for (const lm of src.matchAll(/\[([^\]]+)\]\(([^)\s]+)\)/g)) {
-      check(
-        /^https?:\/\//.test(lm[2]),
-        `【${id}】非 http(s) 链接: ${lm[2]}`
-      );
-      // 「一个链接一个来源」：剥掉（转载：…）括号内的出处说明后再检查顿号，
-      // `[腾讯新闻（转载：工信部、新华社报道）]` 合法，`[Hugging Face、腾讯新闻]` 违规
-      const labelOutsideParens = lm[1].replace(/[（(][^）)]*[）)]/g, '');
-      check(
-        !labelOutsideParens.includes('、'),
-        `【${id}】多个媒体名共用一个链接: [${lm[1]}](${lm[2]})`
-      );
-    }
+    checkLinksIn(src, (msg) => check(false, `【${id}】${msg}`));
   }
 
   // 6. 文末免责声明：最后一个 --- 之后含固定声明与「信息截至」（日期须与 frontmatter 一致）

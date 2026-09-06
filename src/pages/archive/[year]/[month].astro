@@ -2,7 +2,7 @@
 import { getCollection } from 'astro:content';
 import Base from '../../../layouts/Base.astro';
 import DayCard from '../../../components/DayCard.astro';
-import { WEEKDAYS, formatMonthTitle } from '../../../lib/utils';
+import { formatMonthTitle } from '../../../lib/utils';
 
 export async function getStaticPaths() {
   const reports = await getCollection('daily');

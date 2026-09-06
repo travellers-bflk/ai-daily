@@ -37,6 +37,25 @@ const pageDescription =
   parsed.headlines.length > 0
     ? parsed.headlines.slice(0, 3).join('；')
     : `${report.data.title}，AI 行业资讯日报。`;
+
+// 结构化数据：日报是聚合摘要而非单篇新闻报道，故用 BlogPosting 而非 NewsArticle。
+// 新闻卡片在 DOM 中没有稳定 id，不做 ItemList，避免生成虚构的条目 URL。
+const site = Astro.site ?? new URL('https://439952066.xyz');
+const jsonLd = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'BlogPosting',
+  headline: report.data.title,
+  description: pageDescription,
+  datePublished: isoDate(report.data.date),
+  dateModified: isoDate(report.data.date),
+  inLanguage: 'zh-CN',
+  mainEntityOfPage: new URL(canonicalPath, site).href,
+  image: new URL('/og-image.png', site).href,
+  author: { '@type': 'Organization', name: 'AI 日报', url: site.href },
+  publisher: { '@type': 'Organization', name: 'AI 日报', url: site.href },
+})
+  // JSON.stringify 不转义尖括号：标题或速览里若含 </script> 会突破脚本标签
+  .replace(/</g, '\\u003c');
 ---
 
 <Base
@@ -45,10 +64,15 @@ const pageDescription =
   canonicalPath={canonicalPath}
   ogType="article"
 >
+  <Fragment slot="head">
+    {/* application/ld+json 是数据块，浏览器不执行，因此不受 CSP script-src 'self' 限制 */}
+    <script type="application/ld+json" is:inline set:html={jsonLd} />
+  </Fragment>
+
   <header class="daily-header">
     <h1>{report.data.title}</h1>
     <div class="daily-meta">
-      <time datetime={report.data.date.toISOString().slice(0, 10)}>
+      <time datetime={isoDate(report.data.date)}>
         {formatDate(report.data.date)}
       </time>
       <span><b>{totalNews}</b> 条新闻</span>

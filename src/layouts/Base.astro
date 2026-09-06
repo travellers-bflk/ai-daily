@@ -8,6 +8,12 @@ interface Props {
   canonicalPath?: string;
   /** og:type：首页 website，日报详情 article */
   ogType?: 'website' | 'article';
+  /**
+   * 标记页面不应被索引（404 用）。为真时输出 robots noindex，
+   * 并跳过 canonical 与 OG/Twitter 标签——404 会响应所有坏链接，
+   * 若发出 canonical 会把大量无关 URL 的权重信号汇聚到同一页。
+   */
+  noindex?: boolean;
 }
 
 const {
@@ -15,6 +21,7 @@ const {
   description = '每日 AI 行业资讯日报，由 AI 搜集整理发布。',
   canonicalPath = '/',
   ogType = 'website',
+  noindex = false,
 } = Astro.props;
 
 const site = Astro.site ?? new URL('https://439952066.xyz');
@@ -29,26 +36,34 @@ const ogImageUrl = new URL('/og-image.png', site);
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="alternate" type="application/rss+xml" title="AI 日报 RSS" href="/rss.xml" />
-    <link rel="canonical" href={canonicalUrl} />
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
+    {!noindex && <link rel="canonical" href={canonicalUrl} />}
     <meta name="generator" content={Astro.generator} />
     <meta name="description" content={description} />
     <meta name="theme-color" content="#fafaf7" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0f1114" media="(prefers-color-scheme: dark)" />
     <title>{title}</title>
 
-    <meta property="og:title" content={title} />
-    <meta property="og:description" content={description} />
-    <meta property="og:url" content={canonicalUrl} />
-    <meta property="og:type" content={ogType} />
-    <meta property="og:site_name" content="AI 日报" />
-    <meta property="og:locale" content="zh_CN" />
-    <meta property="og:image" content={ogImageUrl} />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content={title} />
-    <meta name="twitter:description" content={description} />
-    <meta name="twitter:image" content={ogImageUrl} />
+    {
+      !noindex && (
+        <>
+          <meta property="og:title" content={title} />
+          <meta property="og:description" content={description} />
+          <meta property="og:url" content={canonicalUrl} />
+          <meta property="og:type" content={ogType} />
+          <meta property="og:site_name" content="AI 日报" />
+          <meta property="og:locale" content="zh_CN" />
+          <meta property="og:image" content={ogImageUrl} />
+          <meta property="og:image:width" content="1200" />
+          <meta property="og:image:height" content="630" />
+          <meta name="twitter:card" content="summary_large_image" />
+          <meta name="twitter:title" content={title} />
+          <meta name="twitter:description" content={description} />
+          <meta name="twitter:image" content={ogImageUrl} />
+        </>
+      )
+    }
+    <slot name="head" />
   </head>
   <body>
     <header class="site-header">

@@ -8,6 +8,10 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # 本 job 只做 checkout / 类型检查 / 构建 / 内容校验，不需要任何写权限。
+    # 不声明则沿用仓库默认（可能是 write-all）。
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

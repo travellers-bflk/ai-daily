@@ -203,13 +203,20 @@ function isSafeUrl(url: string): boolean {
   }
 }
 
+/**
+ * 行内 markdown 链接：`[文字](url)`。
+ * URL 部分允许一层平衡括号，否则 `…/人工智能_(消歧义)` 这类维基链接会在第一个
+ * 右括号处被截断，href 少一个 `)` 且 `</a>` 后残留裸括号。
+ */
+const INLINE_LINK_RE = /\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))*)\)/g;
+
 /** 行内 markdown 安全渲染：整体 HTML 转义 + [文字](http/https url) 链接 + **粗体** */
 export function renderInlineMarkdown(text: string): string {
   // 先整体转义（链接 URL 中的 & 等已被转义，恰好是属性值的安全形式）
   let out = escapeHtml(text);
   // 链接：协议白名单校验用还原后的 URL；href 已随整体转义，无需再处理
   out = out.replace(
-    /\[([^\]]+)\]\(([^)\s]+)\)/g,
+    INLINE_LINK_RE,
     (_m, label: string, href: string) => {
       const raw = href.replace(/&amp;/g, '&');
       if (isSafeUrl(raw)) {
