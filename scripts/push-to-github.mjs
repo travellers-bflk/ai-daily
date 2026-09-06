@@ -21,9 +21,9 @@
  */
 
 import { execSync, execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
-import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { walk, readBlob, gitBlobSha, scanSecrets } from './lib/publish-guards.mjs';
 
 const REPO = 'travellers-bflk/ai-daily';
 const repoDir = process.argv[2];
@@ -53,100 +53,6 @@ try {
 } catch {
   console.error('❌ 内容校验失败，已中止推送。');
   process.exit(3);
-}
-
-/* ---------------- 排除规则 ----------------
- * 这是与 .gitignore 并行维护的第二份清单（本脚本的设计前提是「无需本地 .git」，
- * 因此不能直接用 git check-ignore）。修改 .gitignore 时必须同步这里，反之亦然。
- * 漏掉一条的后果是：被 gitignore 忽略的文件被推送到公开仓库。
- */
-const EXCLUDE_DIRS = new Set([
-  'node_modules', '.git', 'dist', '.astro', '.wrangler', '.vercel',
-  '.vscode', '.idea', '.npm-cache', '__pycache__',
-]);
-const EXCLUDE_NAMES = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini']);
-const EXCLUDE_PATTERNS = [
-  /(^|\/)\.env(\.|$)/i,         // .gitignore: .env / .env.*（任意层级）
-  /\.local$/i,                  // .gitignore: *.local
-  /\.log$/i,                    // .gitignore: *.log
-  /(^|\/)npm-debug\.log/i,      // .gitignore: npm-debug.log*（任意层级，含 .log.1 / .log.gz）
-  /\.pem$/i, /\.key$/i, /\.p12$/i, /\.pfx$/i,
-];
-// .gitignore 用 !.env.example 反向保留模板文件，此处同步放行
-const INCLUDE_OVERRIDES = [/(^|\/)\.env\.example$/i];
-
-/* ---------------- 凭据扫描 ---------------- */
-const SECRET_PATTERNS = [
-  { name: 'GitHub PAT', regex: /\bgh[pousr]_[A-Za-z0-9]{36}\b/g },
-  { name: 'AWS Access Key', regex: /\bAKIA[0-9A-Z]{16}\b/g },
-  { name: 'Private Key', regex: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/g },
-  { name: 'Google API Key', regex: /\bAIza[0-9A-Za-z_-]{35}\b/g },
-  { name: 'Slack Token', regex: /\bxox[baprs]-[0-9a-zA-Z-]{10,}\b/g },
-  { name: 'OpenAI/Anthropic-style Key', regex: /\bsk-[A-Za-z0-9_-]{20,}\b/g },
-  {
-    name: 'Generic api_key/secret/token/password 赋值',
-    regex: /(?:api[_-]?key|secret|token|password|passwd)\s*[:=]\s*['"]?[A-Za-z0-9_\\-]{16,}/gi,
-  },
-];
-
-function scanSecrets(text, filePath) {
-  const hits = [];
-  for (const { name, regex } of SECRET_PATTERNS) {
-    regex.lastIndex = 0;
-    // 只报位置不报内容：打印凭据片段本身就会造成二次泄露（日志会被 CI 留存）
-    for (const m of text.matchAll(regex)) {
-      hits.push({ filePath, pattern: name, line: text.slice(0, m.index).split('\n').length });
-      break;
-    }
-  }
-  return hits;
-}
-
-/* ---------------- 文件读取与 blob sha ---------------- */
-function gitBlobSha(content) {
-  const h = createHash('sha1');
-  h.update(`blob ${content.length}\0`);
-  h.update(content);
-  return h.digest('hex');
-}
-
-const BINARY_EXTS = new Set([
-  '.png', '.jpg', '.jpeg', '.gif', '.ico', '.webp', '.woff', '.woff2',
-  '.ttf', '.otf', '.eot', '.zip', '.gz', '.tgz', '.pdf', '.mp3', '.mp4',
-  '.mov', '.webm',
-]);
-
-function readBlob(full) {
-  const buf = readFileSync(full);
-  const dot = full.lastIndexOf('.');
-  const ext = dot >= 0 ? full.slice(dot).toLowerCase() : '';
-  // 无 null 字节视为文本 → CRLF 归一化为 LF（与 git 存储一致）；二进制原样
-  if (!BINARY_EXTS.has(ext) && !buf.includes(0)) {
-    return Buffer.from(buf.toString('utf8').replace(/\r\n/g, '\n'), 'utf8');
-  }
-  return buf;
-}
-
-function walk(dir, base, out) {
-  for (const name of readdirSync(dir)) {
-    const full = join(dir, name);
-    const st = statSync(full);
-    if (st.isDirectory()) {
-      if (EXCLUDE_DIRS.has(name)) continue;
-      walk(full, base, out);
-    } else {
-      if (EXCLUDE_NAMES.has(name)) continue;
-      const rel = relative(base, full).split(sep).join('/');
-      if (
-        EXCLUDE_PATTERNS.some((re) => re.test(rel)) &&
-        !INCLUDE_OVERRIDES.some((re) => re.test(rel))
-      ) {
-        continue;
-      }
-      out.push({ path: rel, full });
-    }
-  }
-  return out;
 }
 
 /* ---------------- GitHub API ---------------- */

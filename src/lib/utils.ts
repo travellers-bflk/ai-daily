@@ -1,4 +1,4 @@
-import { parseDaily } from './parser';
+import { parseDaily } from './parser.ts';
 
 export const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
 

@@ -16,9 +16,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # 单元测试直接 import src/lib 下的 .ts 文件，依赖 Node 原生的
+          # TypeScript 类型剥离（22.18+ 默认开启）；用 24 与本地开发环境一致
+          node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run check
+      - run: npm test
       - run: npm run build
       - run: npm run validate
