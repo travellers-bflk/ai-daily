@@ -10,13 +10,18 @@
  *
  * 说明：
  *   - 目录内容应与仓库内容一致（如从 tarball 解压，或本地 clone 工作区）
+ *   - 推送前先执行 scripts/validate-content.mjs 内容校验，不通过则中止
  *   - 自动排除 node_modules / dist / .git / .env / 密钥文件等
- *   - 内容与远程完全一致时跳过推送（exit 0）
- *   - 内置凭据模式扫描，命中即中止
+ *     （排除清单与 .gitignore 并行维护，改动需同步，见 EXCLUDE_PATTERNS 处注释）
+ *   - 内置凭据模式扫描，命中即中止；只报告文件与行号，不打印凭据内容
+ *   - 内容与远程完全一致时跳过推送
+ *
+ * 退出码：
+ *   0 成功 / 内容无变化跳过 · 1 参数或推送错误 · 2 凭据扫描命中 · 3 内容校验失败
  */
 
-import { execSync } from 'node:child_process';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { execSync, execFileSync } from 'node:child_process';
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 
@@ -30,20 +35,45 @@ if (!repoDir) {
   process.exit(1);
 }
 
-/* ---------------- 排除规则（与 .gitignore 对齐 + 防呆） ---------------- */
+/* ---------------- 内容校验（推送前置闸） ----------------
+ * 与 `npm run validate` 是同一把闸。放在脚本内部而非依赖调用方先跑，
+ * 是为了让「校验 → 推送」的顺序成为脚本自身的保证：CI 只在 push 之后触发，
+ * 拦不住已经发布的内容，格式错误的日报会让 Cloudflare 构建持续失败。
+ */
+const validateScript = join(repoDir, 'scripts', 'validate-content.mjs');
+if (!existsSync(validateScript)) {
+  console.error(`❌ 找不到内容校验脚本：${validateScript}`);
+  console.error('   推送目录按契约应与仓库内容一致（含 scripts/），已中止推送。');
+  process.exit(3);
+}
+try {
+  // 校验器为零依赖纯 Node 实现，快照目录没有 node_modules 也能直接跑；
+  // 它按自身位置解析 src/content/daily，无需传目录参数
+  execFileSync(process.execPath, [validateScript], { stdio: 'inherit' });
+} catch {
+  console.error('❌ 内容校验失败，已中止推送。');
+  process.exit(3);
+}
+
+/* ---------------- 排除规则 ----------------
+ * 这是与 .gitignore 并行维护的第二份清单（本脚本的设计前提是「无需本地 .git」，
+ * 因此不能直接用 git check-ignore）。修改 .gitignore 时必须同步这里，反之亦然。
+ * 漏掉一条的后果是：被 gitignore 忽略的文件被推送到公开仓库。
+ */
 const EXCLUDE_DIRS = new Set([
   'node_modules', '.git', 'dist', '.astro', '.wrangler', '.vercel',
   '.vscode', '.idea', '.npm-cache', '__pycache__',
 ]);
 const EXCLUDE_NAMES = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini']);
 const EXCLUDE_PATTERNS = [
-  /^\.env(\.|$)/i, /\.log$/i, /\.pem$/i, /\.key$/i, /\.p12$/i, /\.pfx$/i,
+  /(^|\/)\.env(\.|$)/i,         // .gitignore: .env / .env.*（任意层级）
+  /\.local$/i,                  // .gitignore: *.local
+  /\.log$/i,                    // .gitignore: *.log
+  /(^|\/)npm-debug\.log/i,      // .gitignore: npm-debug.log*（任意层级，含 .log.1 / .log.gz）
+  /\.pem$/i, /\.key$/i, /\.p12$/i, /\.pfx$/i,
 ];
-
-const TEXT_EXTS = new Set([
-  '.md', '.ts', '.js', '.mjs', '.cjs', '.astro', '.json', '.svg', '.txt',
-  '.css', '.html', '.xml', '.yml', '.yaml', '.toml',
-]);
+// .gitignore 用 !.env.example 反向保留模板文件，此处同步放行
+const INCLUDE_OVERRIDES = [/(^|\/)\.env\.example$/i];
 
 /* ---------------- 凭据扫描 ---------------- */
 const SECRET_PATTERNS = [
@@ -63,8 +93,11 @@ function scanSecrets(text, filePath) {
   const hits = [];
   for (const { name, regex } of SECRET_PATTERNS) {
     regex.lastIndex = 0;
-    const m = text.match(regex);
-    if (m) hits.push({ filePath, pattern: name, sample: m[0].slice(0, 12) + '…' });
+    // 只报位置不报内容：打印凭据片段本身就会造成二次泄露（日志会被 CI 留存）
+    for (const m of text.matchAll(regex)) {
+      hits.push({ filePath, pattern: name, line: text.slice(0, m.index).split('\n').length });
+      break;
+    }
   }
   return hits;
 }
@@ -104,7 +137,12 @@ function walk(dir, base, out) {
     } else {
       if (EXCLUDE_NAMES.has(name)) continue;
       const rel = relative(base, full).split(sep).join('/');
-      if (EXCLUDE_PATTERNS.some((re) => re.test(rel))) continue;
+      if (
+        EXCLUDE_PATTERNS.some((re) => re.test(rel)) &&
+        !INCLUDE_OVERRIDES.some((re) => re.test(rel))
+      ) {
+        continue;
+      }
       out.push({ path: rel, full });
     }
   }
@@ -150,7 +188,7 @@ async function main() {
   if (secretHits.length) {
     console.error('❌ 隐私扫描失败，已中止推送：');
     for (const h of secretHits) {
-      console.error(`  - ${h.filePath}  命中 [${h.pattern}]  片段: ${h.sample}`);
+      console.error(`  - ${h.filePath}:${h.line}  命中 [${h.pattern}]`);
     }
     console.error('\n请确认文件内容是否为凭据误提交，移除后再推送。');
     process.exit(2);

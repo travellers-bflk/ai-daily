@@ -1,3 +1,8 @@
+# 注意：scripts/push-to-github.mjs 维护着一份与本文件并行的排除清单
+# （EXCLUDE_DIRS / EXCLUDE_PATTERNS），因为该脚本以「无需本地 .git」为前提运行，
+# 无法调用 git check-ignore。修改本文件时必须同步那份清单，反之亦然——
+# 漏掉一条的后果是被忽略的文件（如 *.local）被推送到公开仓库。
+
 node_modules/
 dist/
 .astro/
