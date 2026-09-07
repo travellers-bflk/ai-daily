@@ -6,7 +6,15 @@
  *      → 上传差异 blob → 建树 → 创建提交 → 快进更新 main
  *
  * 用法：
- *   node push-to-github.mjs <目录路径> [提交信息]
+ *   node push-to-github.mjs <目录路径> [提交信息] [--dry-run]
+ *
+ *   --dry-run  跑完内容校验、凭据扫描与远端 diff，打印将要新增/修改/删除的
+ *              文件清单，但不执行任何写操作。本脚本的成功路径会改写公开仓库的
+ *              main，没有这个开关就无法被安全测试；每日推送前也可先跑一次预检。
+ *
+ * 凭据：
+ *   优先读环境变量 AI_DAILY_GH_TOKEN（建议设为仅授权本仓库 Contents 读写的
+ *   fine-grained PAT），未设置时回落到 `gh auth token`。详见下方注释。
  *
  * 说明：
  *   - 目录内容应与仓库内容一致（如从 tarball 解压，或本地 clone 工作区）
@@ -26,12 +34,17 @@ import { join } from 'node:path';
 import { walk, readBlob, gitBlobSha, scanSecrets } from './lib/publish-guards.mjs';
 
 const REPO = 'travellers-bflk/ai-daily';
-const repoDir = process.argv[2];
+const argv = process.argv.slice(2);
+// --dry-run 可出现在任意位置；摘出后再取位置参数
+const dryRun = argv.includes('--dry-run');
+const positional = argv.filter((a) => a !== '--dry-run');
+const repoDir = positional[0];
 const commitMessage =
-  process.argv[3] || `AI 日报更新 ${new Date().toISOString().slice(0, 10)}`;
+  positional[1] || `AI 日报更新 ${new Date().toISOString().slice(0, 10)}`;
 
 if (!repoDir) {
-  console.error('用法: node push-to-github.mjs <目录路径> [提交信息]');
+  console.error('用法: node push-to-github.mjs <目录路径> [提交信息] [--dry-run]');
+  console.error('  --dry-run  跑完校验与 diff，打印将要推送的内容，但不做任何写操作');
   process.exit(1);
 }
 
@@ -135,6 +148,25 @@ async function main() {
 
   if (uploads.length === 0 && deletions.length === 0) {
     console.log('内容与远程 main 完全一致，跳过推送。');
+    return;
+  }
+
+  // 3.5 dry-run：只报告计划，不做任何写操作。
+  // 本脚本的成功路径会改写公开仓库的 main，没有这个开关就无法被安全测试。
+  if (dryRun) {
+    const added = uploads.filter((e) => !remoteMap.has(e.path));
+    const modified = uploads.filter((e) => remoteMap.has(e.path));
+    console.log(`[dry-run] 未做任何写操作。以下为推送计划：`);
+    console.log(`  本地扫描文件 : ${local.length}`);
+    console.log(`  远程 main    : ${remoteSha.slice(0, 7)}`);
+    console.log(`  提交信息     : ${commitMessage}`);
+    console.log(`  新增 ${added.length} 个：`);
+    for (const e of added) console.log(`    + ${e.path}`);
+    console.log(`  修改 ${modified.length} 个：`);
+    for (const e of modified) console.log(`    ~ ${e.path}`);
+    console.log(`  删除 ${deletions.length} 个：`);
+    for (const p of deletions) console.log(`    - ${p}`);
+    console.log('\n[dry-run] 内容校验与凭据扫描均已通过。去掉 --dry-run 即真正推送。');
     return;
   }
 

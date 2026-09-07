@@ -77,6 +77,18 @@ for (const f of files) {
       `【${id}】来源行末尾缺少（M 月 D 日）日期标注`
     );
     checkLinksIn(src, (msg) => check(false, `【${id}】${msg}`));
+
+    // 正文非空。两处需要注意：
+    // 1) split(/^---\s*$/m)[0] 先截断，否则最后一个条目会把文末免责声明当成自己的正文；
+    // 2) slice(1) 跳过块首——split(/^【\d+】/m) 只切掉「【N】」本身，
+    //    该行之后的标题文本会留在块首，不跳过就会被当成正文而假通过。
+    const bodyLines = block
+      .split(/^---\s*$/m)[0]
+      .split(/\r?\n/)
+      .slice(1)
+      .map((l) => l.trim())
+      .filter((l) => l && !/^来源[：:]/.test(l) && !/^【\d+】/.test(l));
+    check(bodyLines.length > 0, `【${id}】正文为空（只有标题与来源）`);
   }
 
   // 6. 文末免责声明：最后一个 --- 之后含固定声明与「信息截至」（日期须与 frontmatter 一致）
