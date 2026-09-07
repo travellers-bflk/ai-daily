@@ -1,0 +1,40 @@
+# 依赖跟踪。
+#
+# 背景：2026-09-07 审查发现 npm audit 报 3 个漏洞（astro 8 条 advisory 含 2 high、
+# sharp libvips 继承漏洞、esbuild dev-server 文件读取），而仓库此前没有任何依赖
+# 跟踪机制，问题是静默累积的。
+#
+# 已核实的结论：这些 advisory 所需的特性本项目一个都没用到（无 define:vars、
+# 无 {...} spread props、无 View Transitions、无 server: 指令、无动态 slot 名、
+# 无页面内 fetch、无 <Image />），且产物是纯静态站点、生产环境无 Node 运行时，
+# 因此当前零暴露面。astro 5.18.2 已是 5.x 最新且无补丁版本，修复要求 7.1+，
+# 跨两个大版本——不在依赖机器人里自动做，留给人工有计划地迁移。
+#
+# 切勿执行 npm audit fix --force：它会直接装 astro@7.x，把一个每天在自动发布的
+# 站点推入未计划的大版本迁移。
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      # 避开每日 22:00（本地时间）的日报自动化推送，减少并发冲突
+      time: "10:00"
+    # 次要/补丁版本合并成一个 PR，降低噪音；主要版本单独出 PR，便于逐个评估
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    # 主要版本（如 astro 5 → 7）不自动合并，只出 PR 供人工决策
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "10:00"
+    # workflow 里的 actions 已钉到 commit SHA，dependabot 能识别并提议更新 SHA。
+    # 注：checkout 与 setup-node 上游已到 v7，首次运行会提议跨大版本升级，
+    # 那属于独立决策，不要顺手合并。
+    open-pull-requests-limit: 3

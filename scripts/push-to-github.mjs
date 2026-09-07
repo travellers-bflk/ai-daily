@@ -20,7 +20,7 @@
  *   0 成功 / 内容无变化跳过 · 1 参数或推送错误 · 2 凭据扫描命中 · 3 内容校验失败
  */
 
-import { execSync, execFileSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { walk, readBlob, gitBlobSha, scanSecrets } from './lib/publish-guards.mjs';
@@ -55,8 +55,23 @@ try {
   process.exit(3);
 }
 
-/* ---------------- GitHub API ---------------- */
-const token = execSync('gh auth token').toString().trim();
+/* ---------------- GitHub API ----------------
+ * 凭据优先级：
+ *   1. AI_DAILY_GH_TOKEN —— 推荐。设为仅授权本仓库 Contents: Read and write 的
+ *      fine-grained PAT，把泄露影响面限制在这一个公开仓库内。
+ *   2. gh auth token —— 回落。这是 gh 登录用的 OAuth token，实测 scope 为
+ *      gist / read:org / repo / workflow，其中 repo 可读写账号下所有仓库（含私有）。
+ *      本脚本只需要 contents:write，范围远超所需；鉴于每日任务会让 AI 抓取任意外部
+ *      网页内容后执行脚本，建议尽快切到方案 1。
+ * 任何情况下都不打印 token 本身。
+ */
+const envToken = process.env.AI_DAILY_GH_TOKEN?.trim();
+const token = envToken || execFileSync('gh', ['auth', 'token'], { encoding: 'utf8' }).trim();
+if (!envToken) {
+  console.error(
+    '提示：未设置 AI_DAILY_GH_TOKEN，回落使用 gh auth token（scope 覆盖账号下全部仓库）。'
+  );
+}
 const API = 'https://api.github.com';
 
 async function api(path, method = 'GET', body = null) {

@@ -1,0 +1,22 @@
+# 统一行尾为 LF。
+#
+# 仓库当前的文本 blob 全部已是 LF，本文件的作用是防止将来从 Windows 提交时
+# 悄悄引入 CRLF。这类问题在本仓库出现过：历史提交 7328d5a「chore: .gitignore
+# 行尾归一化」就是一次事后清理。有了本文件，git 在入库时会统一归一化，
+# 工作区可以按平台习惯显示，不必再手工修。
+#
+# 注意：scripts/push-to-github.mjs 的 readBlob 也会把 CRLF 归一化为 LF 后再算
+# blob sha，与本文件语义一致——两条路径不会产生互相冲突的 sha。
+* text=auto eol=lf
+
+# 二进制文件必须显式声明，否则 text=auto 的自动探测存在误判风险
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary

@@ -11,7 +11,7 @@
  *   每次运行都会重新下载覆盖，保证内容 = 远程 main 最新状态。
  */
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import {
   rmSync, mkdirSync, writeFileSync, readdirSync, renameSync, existsSync, statSync,
 } from 'node:fs';
@@ -40,13 +40,13 @@ mkdirSync(work, { recursive: true });
 
 // 2. 下载 tarball（api.github.com 通道，跟随重定向由 gh 处理）
 const tarball = join(work, 'repo.tar.gz');
-const buf = execSync(`gh api repos/${REPO}/tarball/main`, {
+const buf = execFileSync('gh', ['api', `repos/${REPO}/tarball/main`], {
   maxBuffer: 100 * 1024 * 1024,
 });
 writeFileSync(tarball, buf);
 
 // 3. 解压（Windows 自带 bsdtar；用 cwd + 相对路径，避免 "D:" 被解析为远程主机）
-execSync('tar -xzf repo.tar.gz', { cwd: work, stdio: 'pipe' });
+execFileSync('tar', ['-xzf', 'repo.tar.gz'], { cwd: work, stdio: 'pipe' });
 
 // 4. 定位解压出的唯一顶层目录（形如 travellers-bflk-ai-daily-<sha>）→ 重命名为 repo
 const entries = readdirSync(work).filter(

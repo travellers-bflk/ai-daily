@@ -1,0 +1,15 @@
+root = true
+
+# 与仓库现有代码风格一致：2 空格缩进、UTF-8、LF、文件末尾留换行。
+# 本文件只影响编辑器行为，不会改写已有文件。
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Markdown 用行尾两空格表示硬换行，不能裁剪
+[*.md]
+trim_trailing_whitespace = false
