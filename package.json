@@ -1,14 +1,18 @@
 {
   "name": "ai-daily",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
     "check": "astro check",
     "validate": "node scripts/validate-content.mjs",
+    "audit:baseline": "node scripts/check-audit-baseline.mjs",
     "test": "node --test \"tests/*.test.mjs\""
   },
   "dependencies": {

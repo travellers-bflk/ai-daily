@@ -4,3 +4,5 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
   Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; form-action 'none'; base-uri 'self'
+  # 覆盖托管方默认的 Access-Control-Allow-Origin: *：本站无跨源读取需求
+  Access-Control-Allow-Origin: https://439952066.xyz

@@ -1,0 +1,18 @@
+{
+  "_comment": "已逐条评估并接受的 npm audit advisory 清单（2026-09-09 核定）。评估结论见 CHANGELOG 1.1.0「已知问题」：所需特性本项目均未使用，且产物为纯静态站点。CI 的 check-audit-baseline 步骤会在出现清单之外的新 advisory 时失败——那时必须重新做暴露面分析，而不是直接扩充本清单。清单中已被修复的条目会被提示清理。",
+  "advisories": [
+    "https://github.com/advisories/GHSA-26w7-cxv4-gfx2",
+    "https://github.com/advisories/GHSA-2pvr-wf23-7pc7",
+    "https://github.com/advisories/GHSA-376h-93r7-7g6f",
+    "https://github.com/advisories/GHSA-4g3v-8h47-v7g6",
+    "https://github.com/advisories/GHSA-7pw4-f3q4-r2p2",
+    "https://github.com/advisories/GHSA-8hv8-536x-4wqp",
+    "https://github.com/advisories/GHSA-f48w-9m4c-m7f5",
+    "https://github.com/advisories/GHSA-f88m-g3jw-g9cj",
+    "https://github.com/advisories/GHSA-g7r4-m6w7-qqqr",
+    "https://github.com/advisories/GHSA-j687-52p2-xcff",
+    "https://github.com/advisories/GHSA-jrpj-wcv7-9fh9",
+    "https://github.com/advisories/GHSA-rgj7-g3m4-5g8c",
+    "https://github.com/advisories/GHSA-xr5h-phrj-8vxv"
+  ]
+}
