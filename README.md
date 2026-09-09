@@ -68,16 +68,17 @@ date: 2026-09-05
 
 | 规则 | 要求 |
 |---|---|
-| frontmatter | `title` 非空；`date` 必须是 `YYYY-MM-DD` |
+| frontmatter | `title` 非空；`date` 必须是 `YYYY-MM-DD`；可选 `updated: YYYY-MM-DD`（内容在首发后被修订时填写，用于页面结构化数据的 `dateModified`） |
 | 今日速览 | 必须有 `## 今日速览` 板块，且至少 **3** 条 `1.` 或 `1、` 编号条目 |
 | 正文板块 | 除速览外至少 **1** 个 `## ` 板块 |
 | 新闻条目 | 至少 **5** 条 `【N】标题` |
 | 条目正文 | 每条必须有正文，不能只有标题与来源 |
 | 来源行 | 每条必须有 `来源：`（全角或半角冒号均可） |
-| 来源日期 | 来源行末尾必须有 `（M 月 D 日）` |
+| 来源日期 | 来源行末尾必须有 `（M 月 D 日）`；多来源时**每段各自**带日期，页面会为每段渲染独立徽章 |
 | 链接协议 | 只允许 `http` / `https`；渲染时会阻断 `javascript:` / `data:` |
 | 链接括号 | 必须闭合，且**最多一层嵌套**——渲染器不支持更深的嵌套，会截断 URL |
 | 一个链接一个来源 | 链接文字里不得用 `、` 并列多个媒体名；`[腾讯新闻（转载：工信部、新华社报道）]` 合法，`[Hugging Face、腾讯新闻]` 不合法 |
+| 引号 | 正文不得出现 ASCII 直引号 `"`；中文引语一律用全角 `“”`（确需引用代码片段用反引号行内代码） |
 | 免责声明 | 最后一个 `---` 之后必须含「本文由 AI 辅助整理」，且含 `信息截至 YYYY-MM-DD`，日期须与 frontmatter 的 `date` 一致 |
 
 **`【N】` 编号不被校验器强制**，但 parser 会原样取用作为卡片左上角的 `#N` 标签，
@@ -103,7 +104,14 @@ npm run validate   # 日报内容校验（frontmatter/速览/免责声明/来源
 ```
 
 CI（`.github/workflows/ci.yml`）在 push 与 PR 上依次跑
-`npm ci → check → test → build → validate`，并以 `permissions: contents: read` 最小权限运行。
+`npm ci → check → test → build → validate → 依赖漏洞基线`，并以 `permissions: contents: read` 最小权限运行。
+
+依赖漏洞以**基线**方式管理：`.github/audit-baseline.json` 记录已逐条评估接受的
+advisory（评估方法见 CHANGELOG 1.1.0「已知问题」），`npm run audit:baseline` 在出现
+基线之外的新 advisory 时失败，强制重新做暴露面分析——「零暴露面」是时间点结论，
+astro 的 advisory 曾在三周内从 8 条增至 10 条而无人察觉。注意其中 esbuild 一条的
+影响面是**开发服务器**（Windows 上任意文件读取）：「生产零暴露面」不覆盖
+`npm run dev`，在 Windows 上本地开发时请知悉该风险。
 
 ### 自动化脚本
 
@@ -138,9 +146,13 @@ node scripts/push-to-github.mjs <目录> "提交信息"            # 真正推�
 
 本站为**纯静态内容**，不收集任何用户数据：
 
-- 无 Cookie、无第三方追踪脚本
-- 无遥测、无埋点
-- 构建产物中不加载任何第三方资源（已在 `dist/` 中核实，页面只引用本站路径）
+- 无 Cookie、无遥测、无埋点
+- 构建产物不加载任何第三方资源（页面只引用本站路径）
+- **核实第三方注入必须看线上响应，而不是 `dist/`**：托管边缘（Cloudflare）可能在
+  serve 时向 HTML 注入其自身脚本（分析信标、挑战脚本），这类注入不存在于构建产物中。
+  本站 CSP 的 `script-src 'self'` 会禁止任何非本站脚本执行，故注入不会在访客浏览器运行；
+  若希望连注入本身都消失，需在 Cloudflare 控制台关闭 Web Analytics / Browser Insights
+  与 Bot Fight Mode
 - 推送脚本内置凭据模式扫描（GitHub PAT / AWS / 私钥 / Google / Slack / OpenAI 风格 key / 通用赋值），命中即中止推送；**只报告文件与行号，不打印任何凭据内容片段**，避免报告本身造成二次泄露（脚本见 [`scripts/push-to-github.mjs`](scripts/push-to-github.mjs)，可自行核实）
 - 详见 [隐私说明](https://439952066.xyz/privacy/)
 

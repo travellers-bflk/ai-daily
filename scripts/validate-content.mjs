@@ -98,6 +98,10 @@ for (const f of files) {
   const fmDate = fm[1].match(/^date:\s*(\d{4}-\d{2}-\d{2})/m)?.[1] ?? '';
   check(fmDate !== '' && tail.includes(`信息截至 ${fmDate}`),
     '免责声明缺少「信息截至 YYYY-MM-DD」（或与 frontmatter 日期不一致）');
+
+  // 7. 中文引语必须用全角引号：ASCII 直引号在 CJK 排版中是错的。
+  //    确需引用代码片段时用行内代码跨度（反引号），不用直引号
+  check(!body.includes('"'), '正文含 ASCII 直引号，中文引语应使用 “”');
 }
 
 if (errors.length) {

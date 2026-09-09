@@ -7,6 +7,89 @@
 
 ---
 
+## [1.2.0] - 2026-09-09
+
+第三轮独立审查（5 项 P1、19 项 P2）的修复。审查方法：纯净克隆复现整条 CI、
+在 `dist/` 产物逐条取证、浏览器访问线上站点截图与控制台取证、对每个可疑点写最小
+复现脚本实测。
+
+### 修复 · 用户可见
+
+- **「N 个来源」仍被转载注记抬高**。去重键是完整链接文字，`[今日头条（转载：…）]`
+  与 `[今日头条]` 被算成两家媒体，6/9 天虚高 1–3。新增 `src/lib/sources.ts` 作为
+  分段/剥离/去重的唯一实现（剥离正则此前已存在于 `link-check.mjs` 但页面层没复用）。
+- **多来源条目只有一个日期进徽章**。`splitSourceDate` 只剥末尾一个日期括号，多来源
+  时前面的日期裸留正文（09-08 有 14 条如此）。来源行改为分段模型
+  `sources: SourcePart[]`，每段各自渲染日期徽章。
+- **全站次要文字对比度不达 WCAG AA**。`--fg-faint` 浅色 2.49:1 承担约 11 处小字号
+  信息文字；归档页失效月份 `.nav-disabled` 仅 1.53:1（浅）/1.83:1（深），线上截图里
+  近乎不可读。两套主题均提到 ≥4.5:1，`--fg-mute` 改为仅装饰用途。
+- **行内渲染会产出畸形 HTML**。粗体替换原先在链接替换之后运行，扫描的是已生成的
+  HTML：URL 含 `*` 时 `<strong>` 被写进 href、正文留下孤立 `</strong>`；`**kwargs`、
+  `src/**/*.ts` 这类非粗体星号对会被错误配对。改为链接先占位、粗体用 CommonMark 式
+  flanking 规则。
+- **中文引语用了 ASCII 直引号**（存量 69 处）。全部转为全角 `“”`，并纳入校验契约。
+
+### 修复 · 正确性与健壮性
+
+- 板块名/图标名查表改 `Object.hasOwn`：撞上 `constructor` / `__proto__` 等原型成员时
+  原先会取到真值的非配色对象，`ICONS` 侧还会把函数经 `set:html` 注入。
+- JSON-LD `dateModified` 不再恒等于 `datePublished`：frontmatter 新增可选 `updated`
+  字段（09-08 已回填，该篇首发后经 `c4a1a55` 修订）。
+- 解析结果加进程级缓存并深冻结：一次构建中每篇正文原先被解析约 5 次
+  （首页统计 / DayCard / 详情页 / RSS）。实测单篇 0.0116ms，性能本不构成问题，
+  此举消除的是「同一份正文的派生数据在 4 处独立重算」的结构性重复。
+- 每日自动化重跑产生的同名提交现在可区分：提交信息与远端上一条首行重名且本次修改
+  （非新增）某篇日报时，自动追加「（修订）」。
+
+### 安全
+
+- **推送脚本不再执行待发布目录里的代码**。原先 `execFileSync(node, [<目录>/scripts/validate-content.mjs])`，
+  而每日流程中该目录是刚从远端拉下的快照——仓库一旦被攻破即在发布机上任执行代码。
+  改为执行本脚本旁边的可信校验器副本，只把快照的内容目录作为数据传入。
+- **凭据扫描有了逃生口与范围收敛**。通用赋值模式对 `src/content/` 豁免（日报正文来自
+  任意网页，一篇引用 token 形态字符串的新闻会硬停每日发布且原先无法放行）；六条严格
+  模式仍全路径生效；新增 `AI_DAILY_SECRET_ALLOWLIST`（`path:line` 清单）显式放行误报。
+- **依赖漏洞基线进 CI**。「零暴露面」是 2026-09-07 的一次性人工结论，此后 astro 的
+  advisory 已从 8 条增至 10 条（含一条 critical）而无人察觉。新增
+  `.github/audit-baseline.json` 与 `scripts/check-audit-baseline.mjs`：出现基线之外的
+  新 advisory 即 CI 失败，强制重做暴露面分析。本轮已逐条复核，基线内 13 条所需特性
+  仍未被使用。README 同时补记：esbuild 那条的影响面是 **Windows 开发服务器**，
+  「生产零暴露面」不覆盖 `npm run dev`。
+- CI job 加 `timeout-minutes: 10`；`_headers` 显式收窄托管方默认的
+  `Access-Control-Allow-Origin: *`。
+
+### 可访问性与视觉
+
+- 日报卡片补 `aria-label`（原先整卡的可访问名称是日期加三条速览的拼接）。
+- 顶栏磨砂效果此前从未生效：`backdrop-filter` 被完全不透明的 `background` 挡住，
+  改为半透明（`color-mix`，附不透明回退）。
+- 新闻卡片移除 hover 抬阴影——非交互元素的 hover 暗示可点而点击无反应。
+- 补 `:focus-visible` 焦点环、`prefers-reduced-motion`（平滑滚动与全部过渡）、打印样式。
+- RSS 导航链接去掉 `target="_blank"`（浏览器对 XML 只下载或显示源码树）。
+
+### 文档与卫生
+
+- 隐私页与 README 的「无第三方追踪脚本」改为如实表述：构建产物不加载第三方资源，但
+  托管边缘可能在 serve 时注入其自身脚本（Cloudflare 信标/挑战脚本），本站 CSP 禁止其
+  执行。**核实注入必须看线上响应而非 `dist/`**——首轮以来的核实方法只看构建产物，
+  正是因此漏掉了边缘注入；要连注入本身都消失需在 Cloudflare 控制台关闭
+  Web Analytics / Browser Insights 与 Bot Fight Mode（控制台操作，不在本仓库）。
+- 隐私页删除写给仓库维护者的段落（「本机凭据…」），改为访客视角；更新「最后更新」日期。
+- 删除指向已删代码 `COLOR_VARS` 的过期注释、两处永不生效的 `Astro.site ?? …` 回退。
+- `package.json` 补 `engines: node >=22.18`（测试直接 import `.ts`，依赖原生类型剥离）；
+  重新生成 `package-lock.json`，清掉移除 `tsx` 后遗留的 28 个孤儿条目（507 行）。
+
+### 已知问题
+
+- **Cloudflare 控制台仍开启 Web Analytics / Browser Insights 与 Bot Fight Mode**：
+  边缘注入的信标/挑战脚本被本站 CSP 拦截、不会执行，但注入本身仍在。需控制台关闭，
+  属仓库外操作。
+- `main` 无分支保护（同 1.1.0，需权衡自动化流程）。
+- astro 5→7 大版本迁移仍待有计划地进行；**切勿 `npm audit fix --force`**。
+
+---
+
 ## [1.1.0] - 2026-09-07
 
 两轮独立代码审查（首轮 18 项、复审 12 项）的全部修复，加上工程化加固。
@@ -151,5 +234,6 @@ CI 与 Cloudflare Pages 均构建部署成功，线上站点渲染无变化（�
   来源行渲染做 HTML 转义与 http(s) 协议白名单，外链固定 `noopener noreferrer`
 - 每日自动化：搜集新闻 → 生成 markdown → 提交推送 → 自动部署
 
+[1.2.0]: https://github.com/travellers-bflk/ai-daily/compare/95cd7ec...v1.2.0
 [1.1.0]: https://github.com/travellers-bflk/ai-daily/compare/a370954...v1.1.0
 [1.0.0]: https://github.com/travellers-bflk/ai-daily/releases/tag/v1.0.0
