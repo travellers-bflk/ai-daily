@@ -55,6 +55,10 @@ export const SECRET_PATTERNS = [
   {
     name: 'Generic api_key/secret/token/password 赋值',
     regex: /(?:api[_-]?key|secret|token|password|passwd)\s*[:=]\s*['"]?[A-Za-z0-9_\\-]{16,}/gi,
+    // 日报正文来自任意网页，一篇引用了 token 形态字符串的新闻就会硬停每日发布。
+    // 该模式误报率高、且只可能在代码/配置里构成真实泄露，故对内容目录豁免；
+    // 上面六条严格模式仍对全部路径生效。
+    contentExempt: true,
   },
 ];
 
@@ -62,17 +66,38 @@ export const SECRET_PATTERNS = [
  * 扫描文本中的凭据模式，返回命中位置。
  * 只报文件与行号，不返回任何内容片段——打印凭据片段本身就是二次泄露
  * （输出会被 CI 与流水线日志留存）。每种模式每文件只报第一次命中，避免刷屏。
+ *
+ * @param {string} text 文件内容
+ * @param {string} filePath 仓库相对路径
+ * @param {Set<string>} [allowlist] 已人工核实的 "path:line" 确认清单，命中即放行
  */
-export function scanSecrets(text, filePath) {
+export function scanSecrets(text, filePath, allowlist = new Set()) {
+  const inContent = filePath.split('/').includes('src') &&
+    filePath.split('/').includes('content');
   const hits = [];
-  for (const { name, regex } of SECRET_PATTERNS) {
+  for (const { name, regex, contentExempt } of SECRET_PATTERNS) {
+    if (contentExempt && inContent) continue;
     regex.lastIndex = 0;
     for (const m of text.matchAll(regex)) {
-      hits.push({ filePath, pattern: name, line: text.slice(0, m.index).split('\n').length });
+      const line = text.slice(0, m.index).split('\n').length;
+      if (!allowlist.has(`${filePath}:${line}`)) {
+        hits.push({ filePath, pattern: name, line });
+      }
       break;
     }
   }
   return hits;
+}
+
+/**
+ * 提交信息去重：若与远端上一条提交首行重名、且本次修改（而非新增）了某篇日报，
+ * 追加「（修订）」后缀。每日自动化重跑会在历史里留下两条同名提交，无法区分首发与修订。
+ */
+export function dedupeCommitMessage(message, remoteMessage, modifiesExistingDaily) {
+  if (!modifiesExistingDaily) return message;
+  const firstLine = String(remoteMessage || '').split('\n')[0].trim();
+  if (firstLine && firstLine === message.trim()) return `${message}（修订）`;
+  return message;
 }
 
 /* ---------------- 文件读取与 blob sha ---------------- */

@@ -30,8 +30,11 @@
 
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { walk, readBlob, gitBlobSha, scanSecrets } from './lib/publish-guards.mjs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  walk, readBlob, gitBlobSha, scanSecrets, dedupeCommitMessage,
+} from './lib/publish-guards.mjs';
 
 const REPO = 'travellers-bflk/ai-daily';
 const argv = process.argv.slice(2);
@@ -39,8 +42,11 @@ const argv = process.argv.slice(2);
 const dryRun = argv.includes('--dry-run');
 const positional = argv.filter((a) => a !== '--dry-run');
 const repoDir = positional[0];
-const commitMessage =
-  positional[1] || `AI 日报更新 ${new Date().toISOString().slice(0, 10)}`;
+const explicitMessage = positional[1] || null;
+// 凭据扫描的确认清单：形如 "path:line,path:line"，用于对已人工核实的命中放行
+const secretAllowlist = new Set(
+  (process.env.AI_DAILY_SECRET_ALLOWLIST || '').split(',').map((s) => s.trim()).filter(Boolean)
+);
 
 if (!repoDir) {
   console.error('用法: node push-to-github.mjs <目录路径> [提交信息] [--dry-run]');
@@ -52,17 +58,22 @@ if (!repoDir) {
  * 与 `npm run validate` 是同一把闸。放在脚本内部而非依赖调用方先跑，
  * 是为了让「校验 → 推送」的顺序成为脚本自身的保证：CI 只在 push 之后触发，
  * 拦不住已经发布的内容，格式错误的日报会让 Cloudflare 构建持续失败。
+ *
+ * 注意：执行的是**本脚本旁边**的可信校验器副本，只把待发布目录的内容路径作为
+ * 数据传入。绝不能执行待发布目录里的脚本——每日流程中该目录是刚从远端拉下的
+ * 快照，执行其中的代码等于把发布机的代码执行权交给仓库内容。
  */
-const validateScript = join(repoDir, 'scripts', 'validate-content.mjs');
-if (!existsSync(validateScript)) {
-  console.error(`❌ 找不到内容校验脚本：${validateScript}`);
-  console.error('   推送目录按契约应与仓库内容一致（含 scripts/），已中止推送。');
+const selfDir = dirname(fileURLToPath(import.meta.url));
+const validateScript = join(selfDir, 'validate-content.mjs');
+const contentDir = join(repoDir, 'src', 'content', 'daily');
+if (!existsSync(contentDir)) {
+  console.error(`❌ 找不到日报内容目录：${contentDir}`);
+  console.error('   推送目录按契约应与仓库内容一致（含 src/content/daily），已中止推送。');
   process.exit(3);
 }
 try {
-  // 校验器为零依赖纯 Node 实现，快照目录没有 node_modules 也能直接跑；
-  // 它按自身位置解析 src/content/daily，无需传目录参数
-  execFileSync(process.execPath, [validateScript], { stdio: 'inherit' });
+  // 校验器为零依赖纯 Node 实现，按传入的内容目录校验
+  execFileSync(process.execPath, [validateScript, contentDir], { stdio: 'inherit' });
 } catch {
   console.error('❌ 内容校验失败，已中止推送。');
   process.exit(3);
@@ -115,7 +126,7 @@ async function main() {
   const secretHits = [];
   for (const f of files) {
     const content = readBlob(f.full);
-    const hits = scanSecrets(content.toString('utf8'), f.path);
+    const hits = scanSecrets(content.toString('utf8'), f.path, secretAllowlist);
     if (hits.length) secretHits.push(...hits);
     local.push({ path: f.path, sha: gitBlobSha(content), content });
   }
@@ -124,7 +135,11 @@ async function main() {
     for (const h of secretHits) {
       console.error(`  - ${h.filePath}:${h.line}  命中 [${h.pattern}]`);
     }
-    console.error('\n请确认文件内容是否为凭据误提交，移除后再推送。');
+    console.error(
+      '\n请确认文件内容是否为凭据误提交，移除后再推送。\n' +
+        '若确认为误报（如新闻正文引用的示例字符串），可将 ' +
+        'AI_DAILY_SECRET_ALLOWLIST 设为 "path:line,…" 显式放行。'
+    );
     process.exit(2);
   }
 
@@ -150,6 +165,18 @@ async function main() {
     console.log('内容与远程 main 完全一致，跳过推送。');
     return;
   }
+
+  // 提交信息：调用方未显式给出时用默认值；若与远端上一条提交首行重名、且本次是
+  // 修改（而非新增）某篇日报，则追加「（修订）」——每日自动化重跑会在历史里留下
+  // 两条同名提交，无法区分哪条是首发、哪条是事后修订
+  const modifiesExistingDaily = uploads.some(
+    (e) => remoteMap.has(e.path) && /^src\/content\/daily\/[^/]+\.md$/.test(e.path)
+  );
+  const commitMessage = dedupeCommitMessage(
+    explicitMessage || `AI 日报 ${new Date().toISOString().slice(0, 10)}`,
+    remoteCommit.message,
+    modifiesExistingDaily
+  );
 
   // 3.5 dry-run：只报告计划，不做任何写操作。
   // 本脚本的成功路径会改写公开仓库的 main，没有这个开关就无法被安全测试。

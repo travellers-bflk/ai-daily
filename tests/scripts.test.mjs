@@ -19,6 +19,7 @@ import {
   EXCLUDE_NAMES,
   isExcluded,
   scanSecrets,
+  dedupeCommitMessage,
   gitBlobSha,
   readBlob,
   walk,
@@ -160,6 +161,56 @@ describe('scanSecrets', () => {
     const hits = scanSecrets(text, 'multi.txt');
     assert.equal(hits.length, 2, '两种模式各报一次');
     assert.deepEqual(hits.map((h) => h.pattern).sort(), ['AWS Access Key', 'GitHub PAT']);
+  });
+
+  test('通用赋值模式对日报正文豁免，严格模式不豁免（P2-2）', () => {
+    const generic = ['api_key = "', 'E'.repeat(20), '"'].join('');
+    const strict = ['ghp_', 'A'.repeat(36)].join('');
+    assert.deepEqual(
+      scanSecrets(generic, 'src/content/daily/2026-09-09.md'),
+      [],
+      '新闻正文里的 token 形态字符串不应硬停每日发布'
+    );
+    assert.equal(scanSecrets(generic, 'scripts/x.mjs').length, 1, '代码路径仍须命中');
+    assert.equal(
+      scanSecrets(strict, 'src/content/daily/2026-09-09.md').length,
+      1,
+      '严格模式对内容目录不豁免'
+    );
+  });
+
+  test('确认清单可放行已人工核实的命中（P2-2）', () => {
+    const text = `line one\nline two\nkey = AKIA${'B'.repeat(16)}\nline four`;
+    assert.equal(scanSecrets(text, 'a/b.txt').length, 1);
+    assert.deepEqual(scanSecrets(text, 'a/b.txt', new Set(['a/b.txt:3'])), []);
+    assert.equal(
+      scanSecrets(text, 'a/b.txt', new Set(['a/b.txt:4'])).length,
+      1,
+      '行号不匹配的放行项不应生效'
+    );
+  });
+});
+
+describe('dedupeCommitMessage', () => {
+  test('与远端上一条重名且修改已有日报时追加（修订）（P2-8）', () => {
+    assert.equal(
+      dedupeCommitMessage('AI 日报 2026-09-08', 'AI 日报 2026-09-08\n\nbody', true),
+      'AI 日报 2026-09-08（修订）'
+    );
+  });
+
+  test('信息不同名时原样返回', () => {
+    assert.equal(
+      dedupeCommitMessage('AI 日报 2026-09-09', 'AI 日报 2026-09-08', true),
+      'AI 日报 2026-09-09'
+    );
+  });
+
+  test('新增日报（非修改）时原样返回', () => {
+    assert.equal(
+      dedupeCommitMessage('AI 日报 2026-09-09', 'AI 日报 2026-09-09', false),
+      'AI 日报 2026-09-09'
+    );
   });
 });
 
