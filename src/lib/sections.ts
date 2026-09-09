@@ -41,7 +41,9 @@ function hash(str: string): number {
 }
 
 export function getSectionMeta(title: string): SectionMeta {
-  if (KNOWN[title]) return KNOWN[title];
+  // 必须用 hasOwn：板块名来自 AI 生成内容，若撞上 Object 原型成员
+  // （constructor / toString / __proto__ …），直接下标会取到真值的非配色对象
+  if (Object.hasOwn(KNOWN, title)) return KNOWN[title];
   const palette = FALLBACK_PALETTE;
   return palette[hash(title) % palette.length];
 }

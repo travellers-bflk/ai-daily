@@ -11,7 +11,7 @@ import {
   parseDaily,
   escapeHtml,
   renderInlineMarkdown,
-  renderSourceHtml,
+  renderSourcesHtml,
 } from '../src/lib/parser.ts';
 
 /* ---------------- parseDaily：--- 分隔线的四种形态 ---------------- */
@@ -115,14 +115,30 @@ describe('parseDaily 容错', () => {
   test('来源行同时支持全角与半角冒号', () => {
     const full = parseDaily('## A\n\n【1】t\n\n正文。\n\n来源：[甲](https://a.com)（9 月 5 日）\n');
     const half = parseDaily('## A\n\n【1】t\n\n正文。\n\n来源: [甲](https://a.com)（9 月 5 日）\n');
-    assert.equal(full.sections[0].items[0].source, half.sections[0].items[0].source);
+    assert.deepEqual(full.sections[0].items[0].sources, half.sections[0].items[0].sources);
   });
 
-  test('来源行末尾日期被拆出到 sourceDate，且不带链接时也合法', () => {
+  test('来源行末尾日期被拆出到分段 date，且不带链接时也合法', () => {
     const r = parseDaily('## A\n\n【1】t\n\n正文。\n\n来源：路透社（8 月 31 日）\n');
     const item = r.sections[0].items[0];
-    assert.equal(item.source, '路透社');
-    assert.equal(item.sourceDate, '8 月 31 日');
+    assert.deepEqual(item.sources, [{ text: '路透社', date: '8 月 31 日' }]);
+  });
+
+  test('多来源各自保留自己的日期标注（P1-5：原先只有末尾一个日期进徽章）', () => {
+    const r = parseDaily(
+      '## A\n\n【1】t\n\n正文。\n\n来源：[甲](https://a.com)（9 月 8 日）、[乙](https://b.com)（9 月 9 日）\n'
+    );
+    assert.deepEqual(r.sections[0].items[0].sources, [
+      { text: '[甲](https://a.com)', date: '9 月 8 日' },
+      { text: '[乙](https://b.com)', date: '9 月 9 日' },
+    ]);
+  });
+
+  test('注记内的顿号不是分段点', () => {
+    const r = parseDaily(
+      '## A\n\n【1】t\n\n正文。\n\n来源：[腾讯新闻（转载：工信部、新华社报道）](https://a.com)（9 月 5 日）\n'
+    );
+    assert.equal(r.sections[0].items[0].sources.length, 1);
   });
 });
 
@@ -216,18 +232,71 @@ describe('escapeHtml', () => {
   });
 });
 
-describe('renderSourceHtml', () => {
-  test('多来源用顿号分隔，日期以弱化标签缀尾', () => {
-    const out = renderSourceHtml('[甲](https://a.com)、[乙](https://b.com)', '9 月 5 日');
+describe('renderSourcesHtml', () => {
+  test('多来源分段各自渲染链接，段间以顿号连接', () => {
+    const out = renderSourcesHtml([
+      { text: '[甲](https://a.com)', date: '' },
+      { text: '[乙](https://b.com)', date: '' },
+    ]);
     assert.equal(out.match(/<a /g).length, 2);
-    assert.match(out, /<span class="source-date">9 月 5 日<\/span>$/);
+    assert.match(out, /<\/a>、<a /);
+  });
+
+  test('每个分段各自的日期都以徽章缀尾（P1-5）', () => {
+    const out = renderSourcesHtml([
+      { text: '[甲](https://a.com)', date: '9 月 8 日' },
+      { text: '[乙](https://b.com)', date: '9 月 9 日' },
+    ]);
+    assert.equal(out.match(/<span class="source-date">/g).length, 2);
+    assert.match(out, /<span class="source-date">9 月 8 日<\/span>、/);
+    assert.match(out, /<span class="source-date">9 月 9 日<\/span>$/);
   });
 
   test('无日期时不输出 source-date 标签', () => {
-    assert.ok(!renderSourceHtml('[甲](https://a.com)', '').includes('source-date'));
+    assert.ok(
+      !renderSourcesHtml([{ text: '[甲](https://a.com)', date: '' }]).includes('source-date')
+    );
   });
 
   test('日期文本同样经过转义', () => {
-    assert.match(renderSourceHtml('甲', '<9 月>'), /&lt;9 月&gt;/);
+    assert.match(renderSourcesHtml([{ text: '甲', date: '<9 月>' }]), /&lt;9 月&gt;/);
+  });
+});
+
+/* ---------------- renderInlineMarkdown：粗体 flanking 规则（P1-2） ---------------- */
+
+describe('renderInlineMarkdown 粗体与星号', () => {
+  test('URL 含 * 时不得把 <strong> 写进 href，也不得留下裸星号', () => {
+    const out = renderInlineMarkdown('**重要** 见 [链接](https://x.com/a*b)');
+    assert.equal(
+      out,
+      '<strong>重要</strong> 见 <a href="https://x.com/a*b" target="_blank" rel="noopener noreferrer">链接</a>'
+    );
+  });
+
+  test('URL 含 ** 时 href 不得被截断或注入标签', () => {
+    const out = renderInlineMarkdown('[链接](https://x.com/**) 后面 **粗体** 结束');
+    assert.match(out, /href="https:\/\/x\.com\/\*\*"/, 'href 应完整保留两个星号');
+    assert.match(out, /<strong>粗体<\/strong>/);
+    assert.ok(!out.includes('</strong>粗体'), '不得留下孤立闭标签');
+  });
+
+  test('**kwargs 与 **args 这类非粗体星号对不得配对加粗', () => {
+    const out = renderInlineMarkdown('新框架支持 **kwargs 与 **args 透传参数。');
+    assert.ok(!out.includes('<strong>'), `不应产生加粗: ${out}`);
+    assert.equal(out, '新框架支持 **kwargs 与 **args 透传参数。');
+  });
+
+  test('glob 通配符不得与真粗体跨段配对', () => {
+    const out = renderInlineMarkdown('模型支持 src/**/*.ts 与 **重要** 提示。');
+    assert.equal(out, '模型支持 src/**/*.ts 与 <strong>重要</strong> 提示。');
+  });
+
+  test('链接文字整体加粗仍然生效', () => {
+    const out = renderInlineMarkdown('**[甲](https://a.com)**');
+    assert.equal(
+      out,
+      '<strong><a href="https://a.com" target="_blank" rel="noopener noreferrer">甲</a></strong>'
+    );
   });
 });

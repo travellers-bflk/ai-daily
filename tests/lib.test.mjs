@@ -193,4 +193,18 @@ describe('getSectionMeta', () => {
   test('空板块名不抛异常', () => {
     assert.doesNotThrow(() => getSectionMeta(''));
   });
+
+  test('板块名撞上 Object 原型成员时走哈希回落（P2-6）', () => {
+    const css = readFileSync(join(root, 'src/styles/global.css'), 'utf8');
+    for (const name of ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__']) {
+      const meta = getSectionMeta(name);
+      assert.equal(typeof meta, 'object', `${name} 不应取到原型上的函数/对象`);
+      assert.equal(typeof meta.color, 'string');
+      assert.equal(typeof meta.icon, 'string');
+      assert.ok(
+        css.includes(`.section-block.color-${meta.color}`),
+        `${name} 取到配色 ${meta.color}，但 CSS 没有对应规则`
+      );
+    }
+  });
 });

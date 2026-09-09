@@ -30,14 +30,14 @@
  *   - 缺来源或编号 → 跳过该项
  */
 
+import { splitSourceParts, type SourcePart } from './sources.ts';
+
 export interface NewsItem {
   id: string;
   title: string;
   body: string[];
-  /** 原始来源串（可能含 markdown 链接与末尾日期括号） */
-  source: string;
-  /** 从来源行末尾提取的日期标注，如「8 月 31 日」 */
-  sourceDate: string;
+  /** 来源行按顿号分段后的结果，每段各自带（可选的）日期标注 */
+  sources: SourcePart[];
 }
 
 export interface Section {
@@ -51,27 +51,16 @@ export interface ParsedDaily {
   disclaimer: string;
 }
 
-/** 从来源串中剥离末尾（日期）标注（全角/半角括号皆可） */
-function splitSourceDate(source: string): { text: string; date: string } {
-  const m = source.match(/[（(]([^（）()]{2,12})[）)]\s*$/);
-  if (m && /\d/.test(m[1])) {
-    return { text: source.slice(0, m.index).trim().replace(/[、\s]+$/, ''), date: m[1] };
-  }
-  return { text: source, date: '' };
-}
-
 function makeItem(id: string, title: string): NewsItem {
-  return { id, title, body: [], source: '', sourceDate: '' };
+  return { id, title, body: [], sources: [] };
 }
 
 function setSource(item: NewsItem, line: string) {
   const raw = line.replace(/^来源[：:]\s*/, '').trim();
-  const { text, date } = splitSourceDate(raw);
-  item.source = text;
-  item.sourceDate = date;
+  item.sources = splitSourceParts(raw);
 }
 
-export function parseDaily(body: string): ParsedDaily {
+function parseDailyUncached(body: string): ParsedDaily {
   const lines = body.split(/\r?\n/);
   const result: ParsedDaily = { headlines: [], sections: [], disclaimer: '' };
 
@@ -94,8 +83,13 @@ export function parseDaily(body: string): ParsedDaily {
 
     // 分隔线：向前看第一条非空行——若为「## 」标题则视为板块分隔，否则视为文末声明起始
     if (line === '---') {
-      const nextNonEmpty =
-        lines.slice(i + 1).find((l) => l.trim() !== '') ?? '';
+      let nextNonEmpty = '';
+      for (let j = i + 1; j < lines.length; j++) {
+        if (lines[j].trim() !== '') {
+          nextNonEmpty = lines[j];
+          break;
+        }
+      }
       pushSection();
       if (nextNonEmpty.trimStart().startsWith('## ')) {
         mode = 'idle';
@@ -176,6 +170,35 @@ export function parseDaily(body: string): ParsedDaily {
   return result;
 }
 
+/**
+ * 解析结果缓存：一次构建中同一篇正文会被首页统计、DayCard、详情页与 RSS
+ * 各自解析一遍（合计约 5 次/篇），缓存后每篇只解析一次。
+ * 缓存返回的是共享对象，故结果深冻结——任何调用方都不得改动返回值。
+ */
+const parseCache = new Map<string, ParsedDaily>();
+
+function freezeParsed(p: ParsedDaily): ParsedDaily {
+  for (const s of p.sections) {
+    for (const it of s.items) {
+      Object.freeze(it.body);
+      Object.freeze(it);
+    }
+    Object.freeze(s.items);
+    Object.freeze(s);
+  }
+  Object.freeze(p.sections);
+  Object.freeze(p.headlines);
+  return Object.freeze(p);
+}
+
+export function parseDaily(body: string): ParsedDaily {
+  const hit = parseCache.get(body);
+  if (hit) return hit;
+  const result = freezeParsed(parseDailyUncached(body));
+  parseCache.set(body, result);
+  return result;
+}
+
 /* ============================================================
  * 来源行安全渲染：markdown 链接 → HTML
  * 安全策略：
@@ -214,27 +237,36 @@ const INLINE_LINK_RE = /\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))*)\)/g;
 export function renderInlineMarkdown(text: string): string {
   // 先整体转义（链接 URL 中的 & 等已被转义，恰好是属性值的安全形式）
   let out = escapeHtml(text);
-  // 链接：协议白名单校验用还原后的 URL；href 已随整体转义，无需再处理
+  // 链接先替换为占位符：粗体替换必须看不到 href，否则 URL 里的 * 会把
+  // <strong> 写进属性值，或在正文留下孤立的 </strong>
+  const links: string[] = [];
+  out = out.replace(INLINE_LINK_RE, (_m, label: string, href: string) => {
+    const raw = href.replace(/&amp;/g, '&');
+    links.push(
+      isSafeUrl(raw)
+        ? `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`
+        : label // 不安全或非法 URL：退化为纯文本
+    );
+    return `\u0000${links.length - 1}\u0000`;
+  });
+  // **粗体**：flanking 规则——开 ** 之后、闭 ** 之前不得是空白，且两端不得紧贴
+  // 单词字符或星号。否则 `**kwargs 与 **args`、`src/**/*.ts` 这类技术正文中的
+  // 星号对会被错误配对，产生跨段加粗与裸星号。
   out = out.replace(
-    INLINE_LINK_RE,
-    (_m, label: string, href: string) => {
-      const raw = href.replace(/&amp;/g, '&');
-      if (isSafeUrl(raw)) {
-        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
-      }
-      // 不安全或非法 URL：退化为纯文本
-      return label;
-    }
+    /(?<![\w*])\*\*(?!\s)([^*\n]+?)(?<!\s)\*\*(?![\w*])/g,
+    '<strong>$1</strong>'
   );
-  // **粗体**
-  out = out.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
-  return out;
+  return out.replace(/\u0000(\d+)\u0000/g, (_m, i: string) => links[Number(i)]);
 }
 
-/** 将来源串渲染为安全 HTML：链接可点击，其余文本转义，日期以弱化标签缀尾 */
-export function renderSourceHtml(source: string, date: string): string {
-  const html = renderInlineMarkdown(source);
-  return date
-    ? `${html}<span class="source-date">${escapeHtml(date)}</span>`
-    : html;
+/** 将来源分段渲染为安全 HTML：每段链接可点击、其余文本转义，各自的日期以弱化标签缀尾 */
+export function renderSourcesHtml(parts: SourcePart[]): string {
+  return parts
+    .map((p) => {
+      const html = renderInlineMarkdown(p.text);
+      return p.date
+        ? `${html}<span class="source-date">${escapeHtml(p.date)}</span>`
+        : html;
+    })
+    .join('、');
 }

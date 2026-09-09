@@ -3,7 +3,8 @@ import { getCollection } from 'astro:content';
 import Base from '../../layouts/Base.astro';
 import SectionIcon from '../../components/SectionIcon.astro';
 import { formatDate, WEEKDAYS, isoDate } from '../../lib/utils';
-import { parseDaily, renderSourceHtml, renderInlineMarkdown } from '../../lib/parser';
+import { parseDaily, renderSourcesHtml, renderInlineMarkdown } from '../../lib/parser';
+import { distinctMediaCount } from '../../lib/sources';
 import { getSectionMeta } from '../../lib/sections';
 
 export async function getStaticPaths() {
@@ -24,14 +25,10 @@ export async function getStaticPaths() {
 const { report, newer, older } = Astro.props;
 const parsed = parseDaily(report.body ?? '');
 const totalNews = parsed.sections.reduce((n, s) => n + s.items.length, 0);
-// 去重媒体数：按「、」拆分来源串 → 提取链接文字（无链接取原文）→ 去重
-const totalSources = new Set(
-  parsed.sections
-    .flatMap((s) => s.items.map((i) => i.source))
-    .flatMap((src) => src.split('、'))
-    .map((part) => part.match(/\[([^\]]+)\]/)?.[1] ?? part.trim())
-    .filter(Boolean)
-).size;
+// 去重媒体数：唯一实现在 sources.ts（链接文字剥离转载注记后去重）
+const totalSources = distinctMediaCount(
+  parsed.sections.flatMap((s) => s.items.flatMap((i) => i.sources))
+);
 const canonicalPath = `/daily/${report.id}/`;
 const pageDescription =
   parsed.headlines.length > 0
@@ -40,14 +37,16 @@ const pageDescription =
 
 // 结构化数据：日报是聚合摘要而非单篇新闻报道，故用 BlogPosting 而非 NewsArticle。
 // 新闻卡片在 DOM 中没有稳定 id，不做 ItemList，避免生成虚构的条目 URL。
-const site = Astro.site ?? new URL('https://439952066.xyz');
+// sitemap 集成已强制要求 site 配置，缺失时构建即失败，故此处无需回退字面量
+const site = Astro.site!;
+const modified = report.data.updated ?? report.data.date;
 const jsonLd = JSON.stringify({
   '@context': 'https://schema.org',
   '@type': 'BlogPosting',
   headline: report.data.title,
   description: pageDescription,
   datePublished: isoDate(report.data.date),
-  dateModified: isoDate(report.data.date),
+  dateModified: isoDate(modified),
   inLanguage: 'zh-CN',
   mainEntityOfPage: new URL(canonicalPath, site).href,
   image: new URL('/og-image.png', site).href,
@@ -120,12 +119,12 @@ const jsonLd = JSON.stringify({
                     ))}
                   </div>
                 )}
-                {(item.source || item.sourceDate) && (
+                {item.sources.length > 0 && (
                   <p class="news-source">
                     <span class="source-label">来源：</span>
                     <span
                       class="source-html"
-                      set:html={renderSourceHtml(item.source, item.sourceDate)}
+                      set:html={renderSourcesHtml(item.sources)}
                     />
                   </p>
                 )}
