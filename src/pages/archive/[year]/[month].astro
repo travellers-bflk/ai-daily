@@ -94,7 +94,8 @@ const nextExists = monthKeys.includes(monthKey(next));
     text-decoration: none;
   }
   .hero-stats .nav-disabled {
-    color: var(--fg-mute);
+    /* 不可点由 cursor 与无下划线表达；文字色仍须达 WCAG AA（--fg-mute 仅 1.5:1） */
+    color: var(--fg-faint);
     cursor: default;
   }
 </style>
