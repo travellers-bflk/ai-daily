@@ -20,26 +20,35 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const baselineFile = join(root, '.github', 'audit-baseline.json');
 
 /**
- * 定位 npm-cli.js 并用当前 Node 直接执行。
- * Windows 上以 execFileSync 派生 `npm.cmd` 会触发 EINVAL，而裸名 `npm` 又不是
- * 可执行文件；直接跑 npm 的 JS 入口跨平台且不经 shell。
+ * 取得 `npm audit --json` 的输出，跨平台且不经 shell：
+ *   1. npm_execpath（经 npm 调用时存在）→ 用当前 Node 直接执行该入口；
+ *   2. 非 Windows：裸名 npm 本身是可执行脚本，直接派生；
+ *   3. Windows：npm 是 npm.cmd，execFileSync 派生会 EINVAL，改为执行 npm-cli.js
+ *      （Node 官方安装包在 Windows 是 node_modules/npm、在 Linux/macOS 是
+ *      lib/node_modules/npm，两种布局都查）。
  */
-function npmCliPath() {
+function auditJson() {
+  const opts = { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] };
   if (process.env.npm_execpath && existsSync(process.env.npm_execpath)) {
-    return process.env.npm_execpath;
+    return execFileSync(process.execPath, [process.env.npm_execpath, 'audit', '--json'], opts);
   }
-  const bundled = join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
-  return existsSync(bundled) ? bundled : null;
+  if (process.platform !== 'win32') {
+    return execFileSync('npm', ['audit', '--json'], opts);
+  }
+  const layouts = [
+    join('node_modules', 'npm', 'bin', 'npm-cli.js'),
+    join('lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  ];
+  for (const rel of layouts) {
+    const cli = join(dirname(process.execPath), rel);
+    if (existsSync(cli)) return execFileSync(process.execPath, [cli, 'audit', '--json'], opts);
+  }
+  throw new Error('找不到 npm：npm_execpath 未设置、裸名 npm 不可用、Node 自带 npm 不存在');
 }
 
 let raw;
 try {
-  const cli = npmCliPath();
-  if (!cli) throw new Error('找不到 npm-cli.js（npm_execpath 与 Node 自带 npm 均不存在）');
-  raw = execFileSync(process.execPath, [cli, 'audit', '--json'], {
-    encoding: 'utf8',
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
+  raw = auditJson();
 } catch (err) {
   // npm audit 存在漏洞时退出码非 0，但 stdout 仍是完整 JSON
   raw = err.stdout;
