@@ -12,21 +12,28 @@ import Base from '../layouts/Base.astro';
     <h2>我们不收集什么</h2>
     <ul>
       <li>不设置任何 Cookie</li>
-      <li>不引入任何第三方追踪脚本（Google Analytics、统计 SDK 等）</li>
+      <li>
+        本站构建产物不引用任何第三方脚本、样式或字体——页面只加载本站路径下的资源
+      </li>
+      <li>
+        托管边缘（Cloudflare）可能向响应注入其自身脚本；本站的内容安全策略（CSP）
+        禁止执行任何非本站脚本，因此这些注入不会在你的浏览器中运行
+      </li>
       <li>不收集 IP 地址、设备指纹、浏览器型号</li>
       <li>无任何形式的用户行为埋点</li>
     </ul>
 
     <h2>我们如何发布内容</h2>
     <p>
-      本站所有日报内容由 AI 自动搜集、整理并发布到公开的 GitHub 仓库（<a
+      日报由自动化流程搜集公开来源后生成 Markdown，推送到公开的 GitHub 仓库（<a
         href="https://github.com/travellers-bflk/ai-daily"
         target="_blank"
         rel="noopener">travellers-bflk/ai-daily</a
-      >），通过 Cloudflare Pages 静态托管到本站域名。
+      >），再由 Cloudflare Pages 构建为静态页面发布到本站域名。
     </p>
     <p>
-      自动化流程仅在你（本机用户）触发时由本地脚本执行，本机 GitHub 凭据用于推送内容到仓库；这些凭据从不上传到任何地方。
+      这条链路不接触任何访客数据：本站没有后端、没有表单、没有评论与登录，
+      你的浏览器与服务器之间只有静态文件请求。
     </p>
 
     <h2>本站内容中的隐私边界</h2>
@@ -61,8 +68,14 @@ import Base from '../layouts/Base.astro';
       阅读器会定时拉取本站点 Cloudflare Pages 托管的 rss.xml，不涉及任何用户身份信息。
     </p>
 
-    <p style="margin-top: 2rem; color: var(--fg-faint); font-size: 0.86rem;">
-      最后更新：2026-09-01
-    </p>
+    <p class="privacy-updated">最后更新：2026-09-09</p>
   </article>
 </Base>
+
+<style>
+  .privacy-updated {
+    margin-top: 2rem;
+    color: var(--fg-faint);
+    font-size: 0.86rem;
+  }
+</style>

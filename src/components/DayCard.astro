@@ -15,7 +15,11 @@ const weekday = d.getUTCDay();
 const headlines = extractHeadlines(report.body ?? '');
 ---
 
-<a class="day-card" href={`/daily/${report.id}/`}>
+<a
+  class="day-card"
+  href={`/daily/${report.id}/`}
+  aria-label={`查看 ${report.id} 日报：${headlines[0] ?? '暂无速览'}`}
+>
   <div class="day-card-date">
     <span class="num">
       {month}/{day}

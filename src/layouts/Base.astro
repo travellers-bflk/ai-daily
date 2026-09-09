@@ -24,7 +24,8 @@ const {
   noindex = false,
 } = Astro.props;
 
-const site = Astro.site ?? new URL('https://439952066.xyz');
+// sitemap 集成已强制要求 site 配置，缺失时构建即失败，故无需回退字面量
+const site = Astro.site!;
 const canonicalUrl = new URL(canonicalPath, site);
 const ogImageUrl = new URL('/og-image.png', site);
 ---
@@ -75,7 +76,7 @@ const ogImageUrl = new URL('/og-image.png', site);
         </a>
         <nav class="site-nav">
           <a href="/archive/">归档</a>
-          <a href="/rss.xml" target="_blank" rel="noopener">RSS</a>
+          <a href="/rss.xml">RSS</a>
         </nav>
       </div>
     </header>
