@@ -7,6 +7,90 @@
 
 ---
 
+## [1.3.0] - 2026-09-21
+
+第四轮独立审查（3 项 P1、8 项 P2、17 项 P3）的修复，外加一项审查未覆盖、
+本次自查发现的**发布链路漂移**。
+
+### 修复 · 安全
+
+- **审计闸门此前是 fail-open 的**（P1-2，实测复现）。`check-audit-baseline.mjs`
+  在三种情况下会静默放行：基线 JSON 解析失败抛异常被外层吞掉、`npm audit --json`
+  返回 `{error: …}` 时取不到 `vulnerabilities` 而走空数组、最坏的一种是
+  **基线非空而本次结果为 0 条**时判定「无新增」并退出 0——依赖审计恰好失效的那一次
+  反而被认为是史上最干净的一次。现在这三种都硬失败退出 1。
+- **凭据扫描漏掉 GitHub fine-grained PAT**（P1-3，实测复现）。1.1.0 起文档就建议用
+  fine-grained PAT 替代 `gh auth token`，但扫描正则只有 `ghp_` / `gho_` / `ghu_` /
+  `ghs_` / `ghr_` 五种前缀，**恰恰扫不出自己推荐使用的那种凭据**
+  （`github_pat_` + 22 位 + `_` + 59 位）。补上该模式并同步补 npm token（`npm_` + 36 位）。
+- **单条模式下每种模式只报第一处命中**（P3-1）。原先 `break` 在首次命中后跳出，
+  按 `path:line` 放行一处误报后，同文件其余真实命中再也不会出现。改为按模式累计
+  报告（每种上限 20 处，避免日志刷屏）。
+- **目录遍历会跟随符号链接**（P2-5）。`walk()` 用 `statSync().isDirectory()` 判定，
+  而 `statSync` 跟随链接：快照目录里一个指向外部的链接目录会被整个纳入推送清单
+  （等于把发布机上任意可读文件的内容推到公开仓库）。改用
+  `readdirSync(dir, { withFileTypes: true })` 并跳过 `isSymbolicLink()`。
+- **推送脚本会在待发布目录内执行自己**（P2-4）。1.2.0 已把校验器改为「执行本脚本
+  旁边的可信副本」，但仍在 `repoDir` 内解析 `validate-content.mjs` 的路径；
+  若脚本自身被放进待发布目录，校验器就从不可信处加载。现在启动即校验自身目录不在
+  待发布目录之下，命中则退出 1。
+- **HTTP 响应头补 HSTS**（P2-7）。此前只有 CSP/nosniff/X-Frame-Options 等，
+  缺 `Strict-Transport-Security`，首次访问走 http 时有被降级的机会窗口。
+  已加 `max-age=31536000; includeSubDomains`。
+
+### 修复 · 发布链路漂移（审查未覆盖，本次自查发现）
+
+- **自动化实际执行的本地脚本是 1.2.0 之前的旧版**。审查报告假设 `scripts/` 即线上
+  行为，但每日流程跑的是工作区根目录的另一份副本：本地 `push-to-github.mjs`
+  与 `lib/publish-guards.mjs` 停留在 1.2.0 之前，也就是说 1.2.0 修掉的
+  「执行待发布目录里的校验器」这条 RCE 面**在生产上从未被修复**，且缺
+  `contentExempt`（正文含 token 形态字符串会误报硬停发布）。本次已把仓库版同步回
+  本地，并把 `validate-content.mjs`、`lib/link-check.mjs` 一并纳入同步范围——
+  新版推送脚本按自身位置定位这两个依赖，不同步就会找不到。
+  后续改动脚本必须双向同步（见 README「脚本同步」）。
+
+### 修改 · 内容与来源
+
+- **55 段来源缺日期徽章**（P1-1）。1.2.0 把来源行改成「每段各自渲染日期」，但存量
+  内容里多来源条目只有最后一段带日期，前面的日期裸留在正文里。已按段补齐：
+  优先取该段 URL 里的日期，取不到则用该行原有日期；共 133 处改动，覆盖 19 篇日报。
+- **11 处链接带追踪/分享参数**（P2-2）：`utm_source`、`smid`、`st`、`scene`、
+  `agt`、`commTag`、`refer`、`unlocked_article_code`。已全部剥到裸 URL，
+  并把「追踪参数」与「http 协议降级」写进 `link-check.mjs` 成为硬门禁
+  （此前只校验协议白名单，http 与追踪参数都能通过）。
+- **6 处 URL 修正**：CNBC 一条补 `.html`（原 URL 为 404 死链）、`news.aibase.cn` →
+  `.com`、`theregister.com` → `www.theregister.com`，以及 4 处 http → https。
+- **4 处链接退化为纯文本**：`so.html5.qq.com` 是搜索引擎中转页（3 处），
+  `health.people.com.cn` 的 https 证书不匹配而 http 又是协议降级（1 处）——
+  两难之下保留媒体名、去掉链接比留一个不可用的链接更诚实。
+- **10 处文字勘误**：相对时间写死（「下周一」→「9 月 21 日」、「本周三」→「9 月 16 日」、
+  「明日开售」→「9 月 16 日」）、日期与来源不符（9 月 13 日 → 9 月 15 日）、
+  缺「日」字、媒体名错译（「朝鲜Biz」→「Chosun Biz」）、语句不通（「以少 2.43 倍」
+  →「可减少 2.43 倍」），以及一处**涉及自然人履历的隐私信息删除**（P2-1）。
+- 存量正文里的 `「」` 统一为 `“”`（与 1.2.0 建立的契约一致）。
+
+### 修复 · 工程
+
+- **静态资源缓存**：`/_astro/*` 补 `Cache-Control: immutable`（P2-6）。Astro 的
+  构建产物文件名带内容哈希，此前没有显式缓存头，托管方的默认策略不保证长缓存。
+- **content collection schema 未 `.strict()`**（P3-8）：frontmatter 里多写字段不会被
+  发现（1.2.0 新增的 `updated` 若拼错即静默失效）。已加。
+- **RSS 缺 `atom:link rel="self"` 与 `lastBuildDate`**（P3-10）：部分阅读器靠这两项
+  判定 feed 身份与更新。已补。
+- 单元测试 140 → 174 个：覆盖新加的两种凭据模式、同文件多命中、符号链接遍历、
+  http 与追踪参数拦截，以及「正常参数（`id` 等）不得误报」「路径里的 `_pdya11y`
+  形后缀不是参数」两条反向用例。
+
+### 已知问题
+
+- **Cloudflare 控制台仍开启 Web Analytics / Browser Insights 与 Bot Fight Mode**
+  （P2-3，同 1.2.0）：边缘注入的信标/挑战脚本被本站 CSP 拦截、不会执行，但注入本身
+  仍在。需控制台关闭，属仓库外操作。
+- 其余同 1.2.0：`main` 无分支保护；astro 5→7 大版本迁移仍待有计划地进行，
+  **切勿 `npm audit fix --force`**。
+
+---
+
 ## [1.2.0] - 2026-09-09
 
 第三轮独立审查（5 项 P1、19 项 P2）的修复。审查方法：纯净克隆复现整条 CI、
@@ -234,6 +318,7 @@ CI 与 Cloudflare Pages 均构建部署成功，线上站点渲染无变化（�
   来源行渲染做 HTML 转义与 http(s) 协议白名单，外链固定 `noopener noreferrer`
 - 每日自动化：搜集新闻 → 生成 markdown → 提交推送 → 自动部署
 
+[1.3.0]: https://github.com/travellers-bflk/ai-daily/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/travellers-bflk/ai-daily/compare/95cd7ec...v1.2.0
 [1.1.0]: https://github.com/travellers-bflk/ai-daily/compare/a370954...v1.1.0
 [1.0.0]: https://github.com/travellers-bflk/ai-daily/releases/tag/v1.0.0

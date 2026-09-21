@@ -9,7 +9,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -102,6 +102,10 @@ describe('scanSecrets', () => {
    * scanSecrets 命中，而推送脚本扫描整个仓库，提交后将永久无法推送。 */
   const SYNTHETIC = [
     ['GitHub PAT', ['ghp_', 'A'.repeat(36)].join('')],
+    // fine-grained PAT 正是 README/CHANGELOG 推荐的 AI_DAILY_GH_TOKEN 的形态；
+    // 1.2.0 的扫描器完全认不出它（第四轮审查 P1-3）
+    ['GitHub fine-grained PAT', ['github_pat_', 'F'.repeat(22), '_', 'G'.repeat(59)].join('')],
+    ['npm token', ['npm_', 'H'.repeat(36)].join('')],
     ['AWS Access Key', ['AKIA', 'B'.repeat(16)].join('')],
     ['Private Key', ['-----BEGIN ', 'RSA PRIVATE KEY-----', '\nMIIE...'].join('')],
     ['Google API Key', ['AIza', 'C'.repeat(35)].join('')],
@@ -156,11 +160,21 @@ describe('scanSecrets', () => {
     assert.deepEqual(hits.map((h) => `${h.filePath}:${h.line} ${h.pattern}`), []);
   });
 
-  test('同一文件命中多种模式时全部报告，每种只报一次', () => {
+  test('同一模式的多次命中全部报告，不再只报第一处（P3-1）', () => {
     const text = `ghp_${'A'.repeat(36)} 和 AKIA${'B'.repeat(16)} 以及 ghp_${'C'.repeat(36)}`;
     const hits = scanSecrets(text, 'multi.txt');
-    assert.equal(hits.length, 2, '两种模式各报一次');
-    assert.deepEqual(hits.map((h) => h.pattern).sort(), ['AWS Access Key', 'GitHub PAT']);
+    assert.equal(hits.length, 3, 'GitHub PAT 的两处命中都要报出，外加 AWS 一处');
+    assert.deepEqual(
+      hits.map((h) => h.pattern).sort(),
+      ['AWS Access Key', 'GitHub PAT', 'GitHub PAT']
+    );
+  });
+
+  test('按 path:line 放行一处后，同文件该模式的其余命中仍要报出（P3-1）', () => {
+    const text = `ghp_${'A'.repeat(36)}\nghp_${'C'.repeat(36)}`;
+    const hits = scanSecrets(text, 'multi.txt', new Set(['multi.txt:1']));
+    assert.equal(hits.length, 1, '第 1 行被放行，第 2 行的同模式命中不得一起被静默放行');
+    assert.equal(hits[0].line, 2);
   });
 
   test('通用赋值模式对日报正文豁免，严格模式不豁免（P2-2）', () => {
@@ -284,6 +298,29 @@ describe('walk', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test('不跟随符号链接——指向外部的链接目录不得进入推送清单（P2-5）', (t) => {
+    const dir = mkdtempSync(join(tmpdir(), 'aidaily-symlink-'));
+    const outside = mkdtempSync(join(tmpdir(), 'aidaily-outside-'));
+    try {
+      writeFileSync(join(dir, 'real.md'), 'x');
+      writeFileSync(join(outside, 'id_rsa.key'), 'x');
+      try {
+        symlinkSync(outside, join(dir, 'outsidelink'));
+        symlinkSync(join(dir, 'real.md'), join(dir, 'filelink.md'));
+      } catch {
+        // Windows 未开开发者模式时创建符号链接需要管理员权限。CI 是 Linux，
+        // 本地没权限不该让测试变红，只能跳过。
+        t.skip('当前环境无法创建符号链接，跳过（CI 会覆盖此路径）');
+        return;
+      }
+      const paths = walk(dir, dir).map((f) => f.path).sort();
+      assert.deepEqual(paths, ['real.md'], '链接本身与链接指向的内容都不得被收集');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
 });
 
 /* ---------------- N9：链接校验的四条分支 ---------------- */
@@ -322,6 +359,40 @@ describe('checkLinksIn', () => {
     const msgs = collect('[危险](javascript:alert(1))');
     assert.equal(msgs.length, 1);
     assert.match(msgs[0], /非 http\(s\) 链接/);
+  });
+
+  test('http 链接报出——属协议降级（P2-2）', () => {
+    const msgs = collect('[降级](http://a.example.com/x)');
+    assert.equal(msgs.length, 1);
+    assert.match(msgs[0], /非 https 链接/);
+  });
+
+  test('追踪/分享参数报出（P2-2）', () => {
+    const tracked = [
+      'https://a.example.com/x?utm_source=alphasignal',
+      'https://www.wsj.com/tech/ai/x?st=Jfx6Z1',
+      'https://www.nytimes.com/x.html?unlocked_article_code=1.BFE.6RVR&smid=url-share',
+      'https://view.inews.qq.com/a/20260914?scene=news-skill',
+      'https://3w.huanqiu.com/a/c36dc8?agt=23',
+      'https://x.example.com/y?refer=cp_1009',
+      'https://www.cnstock.com/commonDetail/784537?commTag=true',
+    ];
+    for (const url of tracked) {
+      const msgs = collect(`[甲媒体](${url})`);
+      assert.equal(msgs.length, 1, `${url} 应报出追踪/分享参数`);
+      assert.match(msgs[0], /追踪\/分享参数/);
+    }
+  });
+
+  test('正常参数放行（id 等不是追踪参数）', () => {
+    assert.deepEqual(collect('[一手](https://qwen.ai/blog?id=qwen3.8-omni-flash)'), []);
+  });
+
+  test('路径里的 _pdya11y 形后缀不是参数，不得误报', () => {
+    assert.deepEqual(
+      collect('[量子位](https://www.163.com/dy/article/L6KM0VB80511DSSR_pdya11y.html)'),
+      []
+    );
   });
 
   test('URL 含空白视为未闭合', () => {

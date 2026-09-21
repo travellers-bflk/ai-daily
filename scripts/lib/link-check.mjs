@@ -47,6 +47,30 @@ export function checkLinksIn(src, report) {
     if (!/^https?:\/\//.test(url)) {
       report(`非 http(s) 链接: ${url}`);
     }
+    // http 属协议降级：HTTPS 页面跳出去会被降级或剥离（第四轮审查 P2-2 曾清理 5 条）
+    if (/^http:\/\//.test(url)) {
+      report(`非 https 链接（http 属协议降级）: ${url}`);
+    }
+    // 追踪 / 分享参数：utm_* 系列与各家的分享令牌。这类参数把读者的访问绑到分享者
+    // 账号（纽约时报的 unlocked_article_code、华尔街日报的 st=），或只是统计标识，
+    // 都不该写进永久归档（第四轮审查 P2-2）。
+    // 注意只解析 query 部分：163 的文章 slug 里的 _pdya11y 位于路径中，不是参数，
+    // 不得误伤。
+    const qIdx = url.indexOf('?');
+    if (qIdx >= 0) {
+      const keys = url
+        .slice(qIdx + 1)
+        .split('#')[0]
+        .split('&')
+        .map((kv) => kv.split('=')[0])
+        .filter(Boolean);
+      const tracked = keys.filter((k) =>
+        /^(?:utm_.+|st|smid|scene|refer|agt|commTag|unlocked_article_code)$/i.test(k)
+      );
+      if (tracked.length) {
+        report(`链接带追踪/分享参数（${tracked.join('、')}）: ${url}`);
+      }
+    }
     // 「一个链接一个来源」：剥掉（转载：…）括号内的出处说明后再检查顿号，
     // `[腾讯新闻（转载：工信部、新华社报道）]` 合法，`[Hugging Face、腾讯新闻]` 违规
     const labelOutsideParens = label.replace(/[（(][^）)]*[）)]/g, '');

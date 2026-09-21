@@ -30,7 +30,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   walk, readBlob, gitBlobSha, scanSecrets, dedupeCommitMessage,
@@ -54,6 +54,23 @@ if (!repoDir) {
   process.exit(1);
 }
 
+/* ---------------- 供应链防护 ----------------
+ * selfDir 必须位于待发布目录之外。若从快照目录内部运行本脚本，下面「本脚本旁边的
+ * 可信校验器副本」与被 import 的 publish-guards 全都来自刚下载的远端快照——
+ * 仓库一旦被攻破（一行提交把 scanSecrets 换成 () => [] 就够），RCE 与凭据扫描
+ * 两道闸同时失效。README 记录的调用方式正是相对脚本文件名，cd 进快照目录后照抄
+ * 最容易踩坑（第四轮审查 P2-4）。
+ */
+const selfDir = dirname(fileURLToPath(import.meta.url));
+const publishRoot = resolve(repoDir);
+if (selfDir === publishRoot || selfDir.startsWith(publishRoot + sep)) {
+  console.error('❌ 推送脚本位于待发布目录内部：守卫代码会来自远端快照（供应链攻击面）。');
+  console.error(`   脚本位置  ：${selfDir}`);
+  console.error(`   待发布目录：${publishRoot}`);
+  console.error('   请从待发布目录之外运行（每日自动化从工作区根目录调用本脚本）。');
+  process.exit(1);
+}
+
 /* ---------------- 内容校验（推送前置闸） ----------------
  * 与 `npm run validate` 是同一把闸。放在脚本内部而非依赖调用方先跑，
  * 是为了让「校验 → 推送」的顺序成为脚本自身的保证：CI 只在 push 之后触发，
@@ -63,7 +80,6 @@ if (!repoDir) {
  * 数据传入。绝不能执行待发布目录里的脚本——每日流程中该目录是刚从远端拉下的
  * 快照，执行其中的代码等于把发布机的代码执行权交给仓库内容。
  */
-const selfDir = dirname(fileURLToPath(import.meta.url));
 const validateScript = join(selfDir, 'validate-content.mjs');
 const contentDir = join(repoDir, 'src', 'content', 'daily');
 if (!existsSync(contentDir)) {

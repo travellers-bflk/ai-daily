@@ -25,6 +25,32 @@ if (files.length === 0) {
 
 const errors = [];
 
+/**
+ * 按顿号拆分来源串，只在括号/方括号深度为 0 处拆分。
+ * 与 src/lib/sources.ts 的 splitSourceParts 同构，但刻意不共享代码——
+ * 校验器与解析器互为制衡，解析器自身有缺陷时校验器不应跟着失效。
+ */
+function splitSourceSegments(raw) {
+  const segments = [];
+  let cur = '';
+  let depth = 0;
+  for (const ch of raw) {
+    if (ch === '[' || ch === '(' || ch === '（') depth++;
+    else if (ch === ']' || ch === ')' || ch === '）') depth = Math.max(0, depth - 1);
+    if (ch === '、' && depth === 0) {
+      segments.push(cur);
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  segments.push(cur);
+  return segments.map((s) => s.trim()).filter(Boolean);
+}
+
+/** 末尾的（M 月 D 日）日期标注 */
+const TRAILING_DATE_AT_END = /[（(]\d{1,2}\s*月\s*\d{1,2}\s*日[）)]\s*$/;
+
 for (const f of files) {
   const raw = readFileSync(join(dir, f), 'utf8');
   // 剥离 frontmatter（与 Astro 行为一致）
@@ -71,11 +97,24 @@ for (const f of files) {
     const srcLine = block.match(/^来源[：:]\s*(.+)$/m);
     check(srcLine !== null, `【${id}】缺少「来源：」行`);
     if (!srcLine) continue;
-    const src = srcLine[1];
-    check(
-      /[（(]\d{1,2}\s*月\s*\d{1,2}\s*日[）)]\s*$/.test(src.trim()),
-      `【${id}】来源行末尾缺少（M 月 D 日）日期标注`
-    );
+    const src = srcLine[1].trim();
+    // 多来源时**每段都要自带日期**。1.2.0 起 README 就有这条契约，但校验器此前只查
+    // 行尾一个日期，「一段带日期、其余段裸着」的行全部通过——2026-09-11 起共 55 个
+    // 来源段在线上渲染成没有日期徽章的可疑链接（第四轮审查 P1-1）。此处机器化。
+    const segments = splitSourceSegments(src);
+    if (segments.length > 1) {
+      segments.forEach((seg, i) => {
+        if (!TRAILING_DATE_AT_END.test(seg)) {
+          check(
+            false,
+            `【${id}】来源第 ${i + 1} 段缺少（M 月 D 日）日期标注（多来源时每段各自带日期）：` +
+              `${seg.slice(0, 36)}${seg.length > 36 ? '…' : ''}`
+          );
+        }
+      });
+    } else {
+      check(TRAILING_DATE_AT_END.test(src), `【${id}】来源行末尾缺少（M 月 D 日）日期标注`);
+    }
     checkLinksIn(src, (msg) => check(false, `【${id}】${msg}`));
 
     // 正文非空。两处需要注意：

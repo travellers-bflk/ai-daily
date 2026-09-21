@@ -8,7 +8,7 @@
  * 本模块不得有任何副作用。
  */
 
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 
@@ -45,8 +45,17 @@ export function isExcluded(relPath) {
 }
 
 /* ---------------- 凭据扫描 ---------------- */
+
+/** 每种模式在单个文件内的最多报告条数：足以看出问题规模，又不至于刷屏日志 */
+const MAX_HITS_PER_PATTERN = 20;
+
 export const SECRET_PATTERNS = [
   { name: 'GitHub PAT', regex: /\bgh[pousr]_[A-Za-z0-9]{36}\b/g },
+  // GitHub fine-grained PAT：README 与 CHANGELOG 推荐的 AI_DAILY_GH_TOKEN 恰恰就是
+  // 这种形态（github_pat_<22 位>_<59 位>），而上面那条 classic 规则匹配不到它——
+  // 第四轮审查 P1-3 实测确认：这道闸对官方推荐的凭据完全无效。
+  { name: 'GitHub fine-grained PAT', regex: /\bgithub_pat_[0-9A-Za-z]{22}_[0-9A-Za-z]{59}\b/g },
+  { name: 'npm token', regex: /\bnpm_[A-Za-z0-9]{36}\b/g },
   { name: 'AWS Access Key', regex: /\bAKIA[0-9A-Z]{16}\b/g },
   { name: 'Private Key', regex: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/g },
   { name: 'Google API Key', regex: /\bAIza[0-9A-Za-z_-]{35}\b/g },
@@ -57,7 +66,7 @@ export const SECRET_PATTERNS = [
     regex: /(?:api[_-]?key|secret|token|password|passwd)\s*[:=]\s*['"]?[A-Za-z0-9_\\-]{16,}/gi,
     // 日报正文来自任意网页，一篇引用了 token 形态字符串的新闻就会硬停每日发布。
     // 该模式误报率高、且只可能在代码/配置里构成真实泄露，故对内容目录豁免；
-    // 上面六条严格模式仍对全部路径生效。
+    // 上面八条严格模式仍对全部路径生效。
     contentExempt: true,
   },
 ];
@@ -65,7 +74,8 @@ export const SECRET_PATTERNS = [
 /**
  * 扫描文本中的凭据模式，返回命中位置。
  * 只报文件与行号，不返回任何内容片段——打印凭据片段本身就是二次泄露
- * （输出会被 CI 与流水线日志留存）。每种模式每文件只报第一次命中，避免刷屏。
+ * （输出会被 CI 与流水线日志留存）。每种模式报告该文件下的全部命中，单文件
+ * 累计 MAX_HITS_PER_PATTERN 条后截断以避免刷屏。
  *
  * @param {string} text 文件内容
  * @param {string} filePath 仓库相对路径
@@ -78,12 +88,16 @@ export function scanSecrets(text, filePath, allowlist = new Set()) {
   for (const { name, regex, contentExempt } of SECRET_PATTERNS) {
     if (contentExempt && inContent) continue;
     regex.lastIndex = 0;
+    let reported = 0;
     for (const m of text.matchAll(regex)) {
       const line = text.slice(0, m.index).split('\n').length;
       if (!allowlist.has(`${filePath}:${line}`)) {
         hits.push({ filePath, pattern: name, line });
+        reported += 1;
+        if (reported >= MAX_HITS_PER_PATTERN) break;
       }
-      break;
+      // 不能因首条命中就 break：那样一旦按 path:line 放行第一处，同文件该模式的
+      // 其余命中会被静默放行（第四轮审查 P3-1）。
     }
   }
   return hits;
@@ -127,14 +141,18 @@ export function readBlob(full) {
 
 /** 递归收集目录下应推送的文件，返回 [{ path: 仓库相对路径, full: 绝对路径 }] */
 export function walk(dir, base, out = []) {
-  for (const name of readdirSync(dir)) {
-    const full = join(dir, name);
-    const st = statSync(full);
-    if (st.isDirectory()) {
-      if (EXCLUDE_DIRS.has(name)) continue;
+  // withFileTypes + 跳过符号链接：原先用 statSync 判定目录，而 Node 的 statSync
+  // 会跟随链接——仓库里放一个指向外部的链接目录，其内容会被收进待推送清单并上传到
+  // 公开仓库；EXCLUDE_DIRS/EXCLUDE_NAMES 是名字黑名单，挡不住 ~/.ssh 这类
+  // 经由链接的间接命中（第四轮审查 P2-5）。
+  for (const ent of readdirSync(dir, { withFileTypes: true })) {
+    if (ent.isSymbolicLink()) continue;
+    const full = join(dir, ent.name);
+    if (ent.isDirectory()) {
+      if (EXCLUDE_DIRS.has(ent.name)) continue;
       walk(full, base, out);
-    } else {
-      if (EXCLUDE_NAMES.has(name)) continue;
+    } else if (ent.isFile()) {
+      if (EXCLUDE_NAMES.has(ent.name)) continue;
       const rel = relative(base, full).split(sep).join('/');
       if (isExcluded(rel)) continue;
       out.push({ path: rel, full });

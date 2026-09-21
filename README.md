@@ -2,7 +2,7 @@
 
 每日自动生成的 AI 行业资讯日报，发布于 [439952066.xyz](https://439952066.xyz)。
 
-当前版本 **1.1.0** · 变更记录见 [CHANGELOG.md](CHANGELOG.md)
+当前版本 **1.3.0** · 变更记录见 [CHANGELOG.md](CHANGELOG.md)
 
 ## 内容
 
@@ -75,7 +75,8 @@ date: 2026-09-05
 | 条目正文 | 每条必须有正文，不能只有标题与来源 |
 | 来源行 | 每条必须有 `来源：`（全角或半角冒号均可） |
 | 来源日期 | 来源行末尾必须有 `（M 月 D 日）`；多来源时**每段各自**带日期，页面会为每段渲染独立徽章 |
-| 链接协议 | 只允许 `http` / `https`；渲染时会阻断 `javascript:` / `data:` |
+| 链接协议 | 只允许 `https`；`http` 被视为协议降级而拒绝，`javascript:` / `data:` 在渲染时阻断 |
+| 链接参数 | 不得带追踪/分享参数（`utm_*`、`smid`、`st`、`scene`、`agt`、`commTag`、`refer`、`unlocked_article_code` 等）。抓取到的 URL 先剥到裸链接再写入；`?id=`、`?page=` 这类正常参数不受影响 |
 | 链接括号 | 必须闭合，且**最多一层嵌套**——渲染器不支持更深的嵌套，会截断 URL |
 | 一个链接一个来源 | 链接文字里不得用 `、` 并列多个媒体名；`[腾讯新闻（转载：工信部、新华社报道）]` 合法，`[Hugging Face、腾讯新闻]` 不合法 |
 | 引号 | 正文不得出现 ASCII 直引号 `"`；中文引语一律用全角 `“”`（确需引用代码片段用反引号行内代码） |
@@ -125,16 +126,50 @@ astro 的 advisory 曾在三周内从 8 条增至 10 条而无人察觉。注意
 `fetch-repo.mjs` 会递归删除整个工作目录，因此**只接受目录名为 `.daily-work` 的路径**，
 传其他路径直接拒绝退出——避免误传参数时摧毁无关数据。
 
-`push-to-github.mjs` 支持 `--dry-run`：跑完内容校验、凭据扫描与远端 diff 后，
+`push-to-github.mjs` 还有三道自我保护：
+
+- **不执行待发布目录里的代码**：校验器只从本脚本旁边的可信副本加载，快照目录当作
+  纯数据看待；启动时会再校验自身不在待发布目录之下。仓库一旦被攻破，
+  攻击者也无法在发布机上任执行代码。
+- **不跟随符号链接**：`walk()` 用 `withFileTypes` 判定并跳过链接，快照目录里一个
+  指向外部的链接目录不会被整个纳入推送清单。
+- **凭据扫描**：命中即中止，退出码 2。
+
+它支持 `--dry-run`：跑完内容校验、凭据扫描与远端 diff 后，
 打印将要新增/修改/删除的文件清单，但不做任何写操作。因为该脚本的成功路径会改写
 公开仓库的 main，没有这个开关它就无法被安全测试；每日推送前也可先跑一次预检。
 
 ```bash
-node scripts/push-to-github.mjs <目录> "提交信息" --dry-run   # 预检，不写入
-node scripts/push-to-github.mjs <目录> "提交信息"            # 真正推送
+node push-to-github.mjs <目录> "提交信息" --dry-run   # 预检，不写入
+node push-to-github.mjs <目录> "提交信息"             # 真正推送
 ```
 
+⚠️ **脚本必须放在待发布目录之外运行**（上例即仓库外的工作区根目录；每日自动化
+正是这样调用的，脚本在 `<工作区>/`、被发布的是 `<工作区>/.daily-work/repo`）。
+若把仓库 `scripts/` 里那份直接对着仓库自身跑，会被「自身位于待发布目录内」这道守卫
+拒绝退出——那份脚本来自远端快照，让它自证清白没有意义。
+
 退出码：`0` 成功或内容无变化 · `1` 参数/推送错误 · `2` 凭据扫描命中 · `3` 内容校验失败
+
+⚠️ **目录模式推送会删除远程存在而本地目录里没有的文件**。若本地目录是从旧快照
+拷来的（例如手工维护时），务必先重新 `fetch-repo.mjs` 拉一次，或确认没有别人
+（含每日自动化）在期间往 main 上推过新日报，否则会把那篇直接删掉。
+
+### 脚本同步（重要）
+
+`scripts/` 里的推送脚本与自动化实际执行的**本地工作区副本是两份**：
+
+| 仓库内 | 本地工作区（自动化实际调用） |
+|---|---|
+| `scripts/push-to-github.mjs` | `<工作区>/push-to-github.mjs` |
+| `scripts/validate-content.mjs` | `<工作区>/validate-content.mjs` |
+| `scripts/lib/publish-guards.mjs` | `<工作区>/lib/publish-guards.mjs` |
+| `scripts/lib/link-check.mjs` | `<工作区>/lib/link-check.mjs` |
+
+**改动脚本后必须双向同步，四个文件缺一不可**——新版 `push-to-github.mjs` 按自身位置
+定位 `validate-content.mjs` 与 `lib/`，漏同步会直接找不到依赖。两者曾漂移过一整个
+版本：仓库已修掉的「执行待发布目录里的校验器」在本地副本上仍是旧代码，
+等于修了个寂寞（详见 CHANGELOG 1.3.0「发布链路漂移」）。
 
 **凭据**：脚本优先读环境变量 `AI_DAILY_GH_TOKEN`，未设置时回落到 `gh auth token`。
 建议设为**仅授权本仓库 `Contents: Read and write`** 的 fine-grained PAT——
@@ -153,7 +188,7 @@ node scripts/push-to-github.mjs <目录> "提交信息"            # 真正推�
   本站 CSP 的 `script-src 'self'` 会禁止任何非本站脚本执行，故注入不会在访客浏览器运行；
   若希望连注入本身都消失，需在 Cloudflare 控制台关闭 Web Analytics / Browser Insights
   与 Bot Fight Mode
-- 推送脚本内置凭据模式扫描（GitHub PAT / AWS / 私钥 / Google / Slack / OpenAI 风格 key / 通用赋值），命中即中止推送；**只报告文件与行号，不打印任何凭据内容片段**，避免报告本身造成二次泄露（脚本见 [`scripts/push-to-github.mjs`](scripts/push-to-github.mjs)，可自行核实）
+- 推送脚本内置凭据模式扫描（GitHub 经典与 **fine-grained** PAT / npm token / AWS / 私钥 / Google / Slack / OpenAI 风格 key / 通用赋值），命中即中止推送；**只报告文件与行号，不打印任何凭据内容片段**，避免报告本身造成二次泄露（脚本见 [`scripts/lib/publish-guards.mjs`](scripts/lib/publish-guards.mjs)，可自行核实）
 - 详见 [隐私说明](https://439952066.xyz/privacy/)
 
 ## 更新方式
