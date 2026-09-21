@@ -11,17 +11,45 @@ import Base from '../layouts/Base.astro';
 
     <h2>我们不收集什么</h2>
     <ul>
-      <li>不设置任何 Cookie</li>
+      <li>
+        本站自身不设置任何 Cookie（托管方的机器人防护可能会写入一个
+        <code>cf_clearance</code>，见下节）
+      </li>
       <li>
         本站构建产物不引用任何第三方脚本、样式或字体——页面只加载本站路径下的资源
       </li>
       <li>
-        托管边缘（Cloudflare）可能向响应注入其自身脚本；本站的内容安全策略（CSP）
-        禁止执行任何非本站脚本，因此这些注入不会在你的浏览器中运行
+        不收集 IP 地址、设备指纹、浏览器型号；没有后端、没有表单、没有登录与评论，
+        因此也不存在账号数据
       </li>
-      <li>不收集 IP 地址、设备指纹、浏览器型号</li>
-      <li>无任何形式的用户行为埋点</li>
+      <li>无任何形式的用户行为埋点，没有广告、没有 A/B 实验、没有跨站追踪</li>
     </ul>
+
+    <h2>托管方会加载什么（Cloudflare）</h2>
+    <p>
+      本站跑在 Cloudflare 上，边缘会向页面注入 Cloudflare 自己的两个脚本。
+      本站的 CSP 只允许这两个来源，其余任何脚本一律不执行：
+    </p>
+    <ul>
+      <li>
+        <strong>Web Analytics / Browser Insights（访问量统计）</strong>：加载
+        <code>static.cloudflareinsights.com</code> 的信标，向 Cloudflare 上报
+        <em>聚合</em>数据——浏览量、访客数、来源国家与推荐来源、Core Web Vitals
+        性能指标。它不使用 Cookie、不做浏览器指纹识别、不跨站追踪单个访客，
+        因此不需要 Cookie 同意横幅。它的数据是聚合的，本站无法据此识别任何个人。
+      </li>
+      <li>
+        <strong>Bot Fight Mode（机器人防护）</strong>：运行一段客户端检测脚本，用于
+        把自动化流量与真实浏览器区分开。校验通过后，Cloudflare 可能会写入一个
+        <code>cf_clearance</code> Cookie，用来标记「这个浏览器已经通过校验」，
+        有效期较短，不用于广告或追踪。
+      </li>
+    </ul>
+    <p>
+      换句话说：本站自己什么都不收集，但托管方会按上述方式处理你的请求——
+      这与「用 Cloudflare 打开任何一个网站」时的情况相同。你可以在浏览器里
+      屏蔽这些脚本，页面内容不受任何影响。
+    </p>
 
     <h2>我们如何发布内容</h2>
     <p>
@@ -68,7 +96,7 @@ import Base from '../layouts/Base.astro';
       阅读器会定时拉取本站点 Cloudflare Pages 托管的 rss.xml，不涉及任何用户身份信息。
     </p>
 
-    <p class="privacy-updated">最后更新：2026-09-09</p>
+    <p class="privacy-updated">最后更新：2026-09-21</p>
   </article>
 </Base>
 

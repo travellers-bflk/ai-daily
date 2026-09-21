@@ -7,6 +7,48 @@
 
 ---
 
+## [1.3.1] - 2026-09-21
+
+修正 1.3.0 对「边缘注入」的处理方向。上一版把 Cloudflare 注入的脚本定性为需要
+消除的问题，给出的对策是去控制台关闭 Web Analytics / Browser Insights 与
+Bot Fight Mode——那是拿功能换干净，方向错了。这三个功能都是要用的，正确做法是
+**让它们在严格 CSP 下真正跑起来**。
+
+### 修复 · 让边缘注入真正工作
+
+- **Web Analytics / Browser Insights 此前是静默失效的**。CSP 只有 `script-src 'self'`，
+  边缘注入的 `static.cloudflareinsights.com` 信标被拦。这类拦截不会让页面报错、
+  不影响任何功能，只会在浏览器控制台留一行警告——后台于是永远显示「零访问」，
+  而看上去像是没人来。已按 Cloudflare 文档放行脚本域与上报端点
+  （`script-src` + `connect-src`）。信标自带 SRI，且它不使用 Cookie、不做指纹识别。
+- **Bot Fight Mode 的内联脚本改用 nonce 放行**而非 `'unsafe-inline'`。它注入的是
+  一段内联引导脚本，内嵌每次请求都不同的 `__CF$cv$params={r:…,t:…}`（随机请求 ID +
+  时间戳），**hash 放行在原理上不可行**；官方也明确不推荐 `'unsafe-inline'`——本站 CSP
+  正是最后一道 XSS 防线（即使某处转义有漏，注入的脚本也不会执行），加上它等于自废武功。
+  新增 [`functions/_middleware.js`](functions/_middleware.js)：读 `_headers` 已设好的
+  CSP，往 `script-src` 插一个一次性 nonce 后写回。Cloudflare 会解析响应头里的 nonce
+  并盖到它注入的脚本上（官方行为）。中间件不复制 CSP，避免两处各写一份；
+  任何异常都原样放行——它挂掉的最坏结果只是 JSD 继续被拦，不会让站点出错。
+- 补 `worker-src 'self' blob:`：客户端检测脚本会用到独立线程。
+
+### 文档
+
+- 隐私页改写：不再声称「注入不会执行」，而是如实说明托管方会加载什么——
+  Cloudflare Web Analytics 上报**聚合**数据（浏览量、国家、推荐来源、Core Web Vitals，
+  无 Cookie、无指纹、不跨站追踪），Bot Fight Mode 校验通过后可能写 `cf_clearance`
+  Cookie（安全用途，非广告追踪）。同时说明本站自身仍然什么都不收集。
+- README「隐私」一节拆出「边缘注入与 CSP」小节，记录放行的是哪两个域、为什么、
+  以及 nonce 方案的前提（Cloudflare 默认不缓存 HTML；一旦给 HTML 配长缓存，
+  nonce 会在缓存期内复用，就不能再走 nonce）。
+
+### 测试
+
+- 新增 6 条断言锁住 `_headers` 的 CSP：必须放行信标域与上报端点、不得出现
+  `'unsafe-inline'`、不得写死 nonce（静态 nonce 等同 `'unsafe-inline'`），
+  以及中间件只插 nonce 而不自带第二份 CSP。信标失效没有显性信号，只能靠断言兜住。
+
+---
+
 ## [1.3.0] - 2026-09-21
 
 第四轮独立审查（3 项 P1、8 项 P2、17 项 P3）的修复，外加一项审查未覆盖、
@@ -83,11 +125,11 @@
 
 ### 已知问题
 
-- **Cloudflare 控制台仍开启 Web Analytics / Browser Insights 与 Bot Fight Mode**
-  （P2-3，同 1.2.0）：边缘注入的信标/挑战脚本被本站 CSP 拦截、不会执行，但注入本身
-  仍在。需控制台关闭，属仓库外操作。
-- 其余同 1.2.0：`main` 无分支保护；astro 5→7 大版本迁移仍待有计划地进行，
+- 同 1.2.0：`main` 无分支保护；astro 5→7 大版本迁移仍待有计划地进行，
   **切勿 `npm audit fix --force`**。
+- ~~Cloudflare 控制台仍开启 Web Analytics / Browser Insights 与 Bot Fight Mode~~
+  **已于 1.3.1 关闭此项**：这三个功能是**有意保留**的，改为在 CSP 内放行
+  （信标走域白名单，Bot Fight Mode 的内联脚本走一次性 nonce）。
 
 ---
 
@@ -318,6 +360,7 @@ CI 与 Cloudflare Pages 均构建部署成功，线上站点渲染无变化（�
   来源行渲染做 HTML 转义与 http(s) 协议白名单，外链固定 `noopener noreferrer`
 - 每日自动化：搜集新闻 → 生成 markdown → 提交推送 → 自动部署
 
+[1.3.1]: https://github.com/travellers-bflk/ai-daily/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/travellers-bflk/ai-daily/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/travellers-bflk/ai-daily/compare/95cd7ec...v1.2.0
 [1.1.0]: https://github.com/travellers-bflk/ai-daily/compare/a370954...v1.1.0

@@ -2,7 +2,7 @@
 
 每日自动生成的 AI 行业资讯日报，发布于 [439952066.xyz](https://439952066.xyz)。
 
-当前版本 **1.3.0** · 变更记录见 [CHANGELOG.md](CHANGELOG.md)
+当前版本 **1.3.1** · 变更记录见 [CHANGELOG.md](CHANGELOG.md)
 
 ## 内容
 
@@ -179,15 +179,32 @@ node push-to-github.mjs <目录> "提交信息"             # 真正推送
 
 ## 隐私
 
-本站为**纯静态内容**，不收集任何用户数据：
+本站为**纯静态内容**，自身不收集任何用户数据：
 
-- 无 Cookie、无遥测、无埋点
+- 本站不设 Cookie、不埋点、无后端（cf_clearance 是托管方机器人防护写的，见下）
 - 构建产物不加载任何第三方资源（页面只引用本站路径）
-- **核实第三方注入必须看线上响应，而不是 `dist/`**：托管边缘（Cloudflare）可能在
-  serve 时向 HTML 注入其自身脚本（分析信标、挑战脚本），这类注入不存在于构建产物中。
-  本站 CSP 的 `script-src 'self'` 会禁止任何非本站脚本执行，故注入不会在访客浏览器运行；
-  若希望连注入本身都消失，需在 Cloudflare 控制台关闭 Web Analytics / Browser Insights
-  与 Bot Fight Mode
+- **核实第三方注入必须看线上响应，而不是 `dist/`**：托管边缘（Cloudflare）会在
+  serve 时向 HTML 注入它自己的脚本——Web Analytics 信标与 Bot Fight Mode 的客户端
+  检测脚本。这类注入不存在于构建产物中，只有抓线上响应才看得见。
+
+### 边缘注入与 CSP（1.3.1）
+
+这两个脚本是**有意放行**的，不是拦不住：
+
+| 注入 | 放行方式 | 不放行的后果 |
+|---|---|---|
+| Web Analytics / Browser Insights 信标 | `script-src https://static.cloudflareinsights.com` + `connect-src https://cloudflareinsights.com` | 静默失效——脚本被拦不报错，后台一条数据都收不到，看起来像「没人访问」 |
+| Bot Fight Mode 的内联引导脚本 | [`functions/_middleware.js`](functions/_middleware.js) 在响应头注入一次性 nonce | 客户端机器人检测跑不起来 |
+
+Bot Fight Mode 那段是**内联**脚本，且每次请求内容都不同（内含随机请求 ID 与时间戳），
+**hash 放行不可行**；Cloudflare 官方也不推荐 `'unsafe-inline'`——本站 CSP 正是最后一道
+XSS 防线，加上它等于自废武功。折中方案是官方推荐的 nonce：它会解析响应头里的 nonce
+并盖到它注入的脚本上。中间件不复制 CSP，而是读 `_headers` 已设好的头再插 nonce，
+避免两处各写一份；任何异常都原样放行，中间件挂了最多是 JSD 继续被拦，不会让站点出错。
+
+⚠️ **nonce 依赖「响应一一对应」**：Cloudflare 默认不缓存 HTML，故无需处理。
+若将来给 HTML 配了长缓存，nonce 会在缓存期内复用（等同静态 nonce），
+届时不该再走 nonce 方案。
 - 推送脚本内置凭据模式扫描（GitHub 经典与 **fine-grained** PAT / npm token / AWS / 私钥 / Google / Slack / OpenAI 风格 key / 通用赋值），命中即中止推送；**只报告文件与行号，不打印任何凭据内容片段**，避免报告本身造成二次泄露（脚本见 [`scripts/lib/publish-guards.mjs`](scripts/lib/publish-guards.mjs)，可自行核实）
 - 详见 [隐私说明](https://439952066.xyz/privacy/)
 

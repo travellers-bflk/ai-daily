@@ -3,7 +3,14 @@
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
-  Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; form-action 'none'; base-uri 'self'
+  # CSP 说明（改动前务必读完）：
+  #  - 只放行 Cloudflare 自己的两个域，为的是让 Web Analytics / Browser Insights
+  #    真正能跑：信标脚本被拦时不会报错，只会静默地一条数据都收不到（1.3.1）。
+  #  - Bot Fight Mode 注入的是**内联**脚本，且每次请求内容都不同（内含随机 r/t），
+  #    无法用 hash 放行，官方也明确不推荐 'unsafe-inline'。改为由
+  #    functions/_middleware.js 在响应头里注入一次性 nonce——Cloudflare 会解析
+  #    响应头的 nonce 并盖到它注入的脚本上。该文件失效时退回这里的严格策略。
+  Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' https://static.cloudflareinsights.com; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://cloudflareinsights.com; worker-src 'self' blob:; frame-ancestors 'none'; form-action 'none'; base-uri 'self'
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   # 覆盖托管方默认的 Access-Control-Allow-Origin: *：本站无跨源读取需求
   Access-Control-Allow-Origin: https://439952066.xyz

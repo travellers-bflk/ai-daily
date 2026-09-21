@@ -417,3 +417,46 @@ describe('checkLinksIn', () => {
     assert.match(msgs[0], /非 http\(s\) 链接/);
   });
 });
+
+/* ---------------- 边缘注入与 CSP 的对照 ----------------
+ * 信标被 CSP 拦下时浏览器只在控制台留一行警告，站点照常工作、后台却一条数据都收不到
+ * ——这种失效没有任何显性信号，只能靠断言锁住。反过来，'unsafe-inline' 一旦溜进
+ * script-src，最后一道 XSS 防线就没了，同样要在测试里挡住。
+ */
+
+describe('public/_headers 的 CSP 与 Cloudflare 边缘注入', () => {
+  const raw = readFileSync(join(root, 'public', '_headers'), 'utf8');
+  const csp = raw
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => l.startsWith('Content-Security-Policy:'));
+
+  const directive = (name) => (csp.match(new RegExp(`\\b${name}\\b[^;]*`)) || [''])[0];
+
+  test('存在 CSP 行', () => {
+    assert.ok(csp, 'public/_headers 里找不到 Content-Security-Policy');
+  });
+
+  test('script-src 放行 Cloudflare 信标脚本（否则 Web Analytics 静默失效）', () => {
+    assert.match(directive('script-src'), /https:\/\/static\.cloudflareinsights\.com/);
+  });
+
+  test('connect-src 放行信标上报端点', () => {
+    assert.match(directive('connect-src'), /https:\/\/cloudflareinsights\.com/);
+  });
+
+  test("script-src 不得出现 'unsafe-inline'", () => {
+    assert.doesNotMatch(directive('script-src'), /'unsafe-inline'/);
+  });
+
+  test("script-src 不得写死 nonce（静态 nonce 等同 'unsafe-inline'）", () => {
+    assert.doesNotMatch(directive('script-src'), /'nonce-/);
+  });
+
+  test('中间件只在 CSP 里插 nonce，且不自带第二份 CSP', () => {
+    const mw = readFileSync(join(root, 'functions', '_middleware.js'), 'utf8');
+    assert.match(mw, /content-security-policy/i);
+    assert.match(mw, /'nonce-\$\{nonce\}'/);
+    assert.doesNotMatch(mw, /default-src/);
+  });
+});
