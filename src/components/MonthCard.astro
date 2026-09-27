@@ -1,0 +1,55 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import { calendarCells } from '../lib/utils';
+
+interface Props {
+  year: number;
+  month: number; // 1-based
+  items: CollectionEntry<'daily'>[]; // 该月日报（任意顺序，组件内按 id 建集合）
+}
+
+const { year, month, items } = Astro.props;
+
+// content 条目 id 即 YYYY-MM-DD（与 DayCard 的 /daily/ 链接同一来源）
+const have = new Set(items.map((r) => r.id));
+const cells = calendarCells(year, month);
+const mm = String(month).padStart(2, '0');
+// 构建期的「今天」，仅用于高亮环；静态站无运行时更新，下一次构建自然刷新
+const todayIso = new Date().toISOString().slice(0, 10);
+// 周一开头（中国惯例）；utils 的 WEEKDAYS 是周日开头，供 formatDate 使用，与此处职责不同
+const CAL_WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'];
+---
+
+<section class="month-card" aria-label={`${year} 年 ${month} 月日历`}>
+  <header class="month-card-head">
+    <h3>{year} 年 {month} 月</h3>
+    <span class="month-card-count">{items.length} 期</span>
+    <a class="month-card-all" href={`/archive/${year}/${mm}/`}>查看全部</a>
+  </header>
+  {/* 星期表头与空白格纯属视觉对齐，日期链接自带完整 aria-label，隐藏避免朗读噪音 */}
+  <div class="cal-weekdays" aria-hidden="true">
+    {CAL_WEEKDAYS.map((w) => <span>{w}</span>)}
+  </div>
+  <div class="cal-grid">
+    {
+      cells.map((day) => {
+        if (day === null) {
+          return <span class="cal-cell cal-blank" aria-hidden="true" />;
+        }
+        const iso = `${year}-${mm}-${String(day).padStart(2, '0')}`;
+        if (!have.has(iso)) {
+          return <span class="cal-cell cal-day">{day}</span>;
+        }
+        const cls =
+          iso === todayIso
+            ? 'cal-cell cal-day has-report is-today'
+            : 'cal-cell cal-day has-report';
+        return (
+          <a class={cls} href={`/daily/${iso}/`} aria-label={`${year}年${month}月${day}日日报`}>
+            {day}
+          </a>
+        );
+      })
+    }
+  </div>
+</section>

@@ -2,6 +2,7 @@
 import { getCollection } from 'astro:content';
 import Base from '../layouts/Base.astro';
 import DayCard from '../components/DayCard.astro';
+import MonthCard from '../components/MonthCard.astro';
 import { extractHeadlines } from '../lib/utils';
 
 const reports = (await getCollection('daily')).sort(
@@ -36,7 +37,7 @@ const totalCount = reports.length;
 const allHeadlines = reports.flatMap((r) => extractHeadlines(r.body ?? ''));
 ---
 
-<Base title="AI 日报 · 每日 AI 行业资讯">
+<Base title="AI 日报 · 每日 AI 行业资讯" canonicalPath="/">
   <section class="hero">
     <h1>AI 日报</h1>
     <p>每日 AI 行业资讯，由 AI 搜集整理。信息密度优先，克制客观。</p>
@@ -47,6 +48,22 @@ const allHeadlines = reports.flatMap((r) => extractHeadlines(r.body ?? ''));
   </section>
 
   {groups.length === 0 && <p class="empty-tip">暂无日报，敬请期待。</p>}
+
+  {
+    /* 按月收纳：全量月份（新→旧）的月历点阵卡；月份累积后归档页承担全量导航 */
+    groups.length > 0 && (
+      <section class="month-matrix">
+        <h2 class="month-heading">
+          <span>按月收纳</span>
+        </h2>
+        <div class="month-cards-grid">
+          {groups.map((g) => (
+            <MonthCard year={g.year} month={g.month} items={g.items} />
+          ))}
+        </div>
+      </section>
+    )
+  }
 
   {
     visibleGroups.map((group) => {

@@ -36,40 +36,45 @@ export async function getStaticPaths() {
 
 const { year, month, items, monthKeys } = Astro.props;
 
-// month 为 1-based，Date 构造器月份为 0-based：上一个月 = month-2，下一个月 = month
-const prev = new Date(year, month - 2, 1);
-const next = new Date(year, month, 1);
+// month 为 1-based，Date 构造器月份为 0-based：上一个月 = month-2，下一个月 = month。
+// 一律 UTC 构造 + UTC getter，与全站日期基准一致（key 与渲染 label 同基准，避免
+// 负偏移构建环境下 label 与链接 key 错位）
+const prev = new Date(Date.UTC(year, month - 2, 1));
+const next = new Date(Date.UTC(year, month, 1));
 const monthKey = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 const prevExists = monthKeys.includes(monthKey(prev));
 const nextExists = monthKeys.includes(monthKey(next));
 ---
 
-<Base title={`${year} 年 ${month} 月 · AI 日报归档`}>
+<Base
+  title={`${year} 年 ${month} 月 · AI 日报归档`}
+  canonicalPath={`/archive/${year}/${String(month).padStart(2, '0')}/`}
+>
   <section class="hero">
     <h1>{formatMonthTitle(year, month)}</h1>
     <p>共 {items.length} 期日报</p>
     <div class="hero-stats">
       {
         prevExists ? (
-          <a href={`/archive/${prev.getFullYear()}/${String(prev.getMonth() + 1).padStart(2, '0')}/`}>
-            ← {prev.getFullYear()} 年 {prev.getMonth() + 1} 月
+          <a href={`/archive/${prev.getUTCFullYear()}/${String(prev.getUTCMonth() + 1).padStart(2, '0')}/`}>
+            ← {prev.getUTCFullYear()} 年 {prev.getUTCMonth() + 1} 月
           </a>
         ) : (
           <span class="nav-disabled">
-            ← {prev.getFullYear()} 年 {prev.getMonth() + 1} 月
+            ← {prev.getUTCFullYear()} 年 {prev.getUTCMonth() + 1} 月
           </span>
         )
       }
       <a href="/archive/">全部归档</a>
       {
         nextExists ? (
-          <a href={`/archive/${next.getFullYear()}/${String(next.getMonth() + 1).padStart(2, '0')}/`}>
-            {next.getFullYear()} 年 {next.getMonth() + 1} 月 →
+          <a href={`/archive/${next.getUTCFullYear()}/${String(next.getUTCMonth() + 1).padStart(2, '0')}/`}>
+            {next.getUTCFullYear()} 年 {next.getUTCMonth() + 1} 月 →
           </a>
         ) : (
           <span class="nav-disabled">
-            {next.getFullYear()} 年 {next.getMonth() + 1} 月 →
+            {next.getUTCFullYear()} 年 {next.getUTCMonth() + 1} 月 →
           </span>
         )
       }

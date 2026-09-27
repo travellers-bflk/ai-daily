@@ -9,7 +9,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, writeFileSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, mkdirSync, rmSync, symlinkSync, lstatSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -314,6 +314,13 @@ describe('walk', () => {
         t.skip('当前环境无法创建符号链接，跳过（CI 会覆盖此路径）');
         return;
       }
+      // 有些环境（Windows 沙箱/无 reparse point 支持的文件系统层）symlinkSync
+      // 不抛异常但静默退化为普通文件副本——此时「跳过链接」无从验证，
+      // 断言会误报 walk 缺陷，只能跳过（1.4.0 实测命中）。
+      if (!lstatSync(join(dir, 'filelink.md')).isSymbolicLink()) {
+        t.skip('当前环境把符号链接静默退化为普通文件，无法验证链接跳过行为（CI 会覆盖此路径）');
+        return;
+      }
       const paths = walk(dir, dir).map((f) => f.path).sort();
       assert.deepEqual(paths, ['real.md'], '链接本身与链接指向的内容都不得被收集');
     } finally {
@@ -458,5 +465,32 @@ describe('public/_headers 的 CSP 与 Cloudflare 边缘注入', () => {
     assert.match(mw, /content-security-policy/i);
     assert.match(mw, /'nonce-\$\{nonce\}'/);
     assert.doesNotMatch(mw, /default-src/);
+  });
+
+  test("object-src 显式置 'none'（1.4.0 加固，不落回 default-src）", () => {
+    assert.match(directive('object-src'), /object-src 'none'/);
+  });
+
+  test('中间件异常路径不自行构造无安全头的 500 响应（1.4.0）', () => {
+    const mw = readFileSync(join(root, 'functions', '_middleware.js'), 'utf8');
+    assert.doesNotMatch(mw, /status:\s*500/, '裸 500 响应会丢失 _headers 的全部安全头');
+  });
+});
+
+/* ---------------- 零客户端 JS 守卫 ----------------
+ * 全站硬约束：页面不得引入任何客户端脚本（Web Analytics/BFM 由边缘注入，不走源码）。
+ * 日历点阵卡是可交互元素最密集的新组件，最容易在后续迭代里被「顺手」加上
+ * 展开/收起之类的小脚本——在这里锁死。
+ */
+describe('组件的零 JS 约束', () => {
+  test('MonthCard 不含 script、内联事件处理器与 grid 角色', () => {
+    const src = readFileSync(join(root, 'src/components/MonthCard.astro'), 'utf8');
+    assert.doesNotMatch(src, /<script/i, '全站零客户端 JS，交互必须回退为纯链接');
+    assert.doesNotMatch(src, /\son[a-z]+\s*=/i, '不得使用内联事件处理器');
+    assert.doesNotMatch(
+      src,
+      /role\s*=\s*["']grid["']/,
+      'role="grid" 承诺方向键导航，没有 JS 就是空头支票；用纯链接列表 + aria-label'
+    );
   });
 });

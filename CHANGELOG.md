@@ -7,6 +7,67 @@
 
 ---
 
+## [1.4.0] - 2026-09-27
+
+首页新增「按月收纳」日历点阵卡，并修复一次全面安全/技术审查发现的 1 项 P1
+与一组低风险 P2。
+
+### 新增 · 按月收纳
+
+- 首页 hero 之后新增「按月收纳」区块：每个月一张月历点阵卡
+  （[`MonthCard.astro`](src/components/MonthCard.astro)），有日报的日期高亮、
+  可点击直达当天日报，另有「查看全部」进月归档页。全部在构建期生成，
+  可点日期是纯 `<a>`——全站零客户端 JS 的约束不变。
+- 无障碍选型：不用 `role="grid"`（它承诺方向键导航，没有 JS 就是空头支票），
+  用纯链接列表 + 完整 `aria-label`（如「2026年9月3日日报」）；星期表头与
+  空白格 `aria-hidden`，避免朗读噪音。
+- `utils.ts` 新增 `calendarCells(year, month)`（周一开头，消费了预留的
+  `daysInMonth`）。**1 号星期必须走 `Date.UTC(...).getUTCDay()`**——本地 getter
+  在负偏移构建环境会把整月算错位一天（同 P1-4 的教训），已有测试锁定。
+
+### 修复 · P1：归档/隐私页 canonical 错指首页
+
+- `Base.astro` 的 `canonicalPath` 曾缺省为 `'/'`，导致归档总览、全部月归档页、
+  隐私页的 `<link rel="canonical">` 与 `og:url` 全部指向首页——搜索引擎会把
+  这些页的权重合并到首页、自身难以被收录。现三处页面显式传值，并把
+  `canonicalPath` 改为**必填**，编译期杜绝复发（`astro check` 兜底）。
+
+### 修复 · 安全响应头与中间件
+
+- CSP 补 `object-src 'none'`（此前回落 `default-src 'self'`，允许同源
+  `<object>/<embed>`）与 `upgrade-insecure-requests`（来源链接经校验器强制
+  https，升级无副作用）。
+- 新增 `Cross-Origin-Opener-Policy: same-origin` 与
+  `Cross-Origin-Resource-Policy: same-origin`（本站无弹窗/跨源嵌入需求）。
+- `functions/_middleware.js` 不再自造裸 500 响应：`context.next()` 抛异常时
+  原样上抛交回 Pages 错误处理——自造响应不携带 `_headers` 的任何安全头。
+- `/favicon.svg` 与 `/og-image.png` 显式 `Cache-Control: public, max-age=86400`
+  （此前继承 Pages 默认约 4 小时）。
+
+### 修复 · 其他
+
+- 月归档页上/下一月导航统一为 UTC 构造 + UTC getter（此前 `monthKey` 用本地
+  getter、渲染 label 又用另一组，基准不统一；负偏移环境有错位风险）。
+- 新增 skip-link（跳到正文），键盘用户可跳过页头导航。
+- 删除 `<meta name="generator">`（不再暴露 Astro 精确版本）。
+- sitemap 显式排除 `/404`（@astrojs/sitemap 默认不过滤；404 本已 noindex，
+  此为主动收口）。
+- 隐私页两处外链 `rel="noopener"` 补齐 `noreferrer`，与渲染器生成的外链一致。
+- 内容校验器新增「控制字符」规则：允许 `\t \n \r`，拒绝其余 C0 与 DEL——
+  NUL 类字符只会来自编辑器/管道事故。仓库 `scripts/` 与本地自动化副本已同步。
+- 符号链接测试的跳过条件补强：有的环境（Windows 沙箱）`symlinkSync` 不抛异常
+  但把链接静默退化为普通文件副本，此前会让「walk 跳过符号链接」断言误报
+  walk 缺陷；现用 `lstat` 复核链接是否真的成立，不成立则跳过（CI 仍覆盖）。
+
+### 排期项（本次不执行）
+
+- astro 5.x → 7.x 大版本迁移：13 条 advisory 已有基线管理 + dependabot 周检，
+  暴露面为零（纯静态产物），但应在 5.x 停止维护前完成迁移，避免基线膨胀。
+- 线上核验项：nonce 是否出现在生产响应头、Bot Fight Mode 脚本实际执行、
+  HTML 缓存行为、HSTS preload 评估与提交。
+
+---
+
 ## [1.3.1] - 2026-09-21
 
 修正 1.3.0 对「边缘注入」的处理方向。上一版把 Cloudflare 注入的脚本定性为需要

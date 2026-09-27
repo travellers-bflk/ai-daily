@@ -53,6 +53,12 @@ const TRAILING_DATE_AT_END = /[（(]\d{1,2}\s*月\s*\d{1,2}\s*日[）)]\s*$/;
 
 for (const f of files) {
   const raw = readFileSync(join(dir, f), 'utf8');
+  // 0. 控制字符：NUL 等不可见字符只会来自编辑器/管道事故，也会撞 parser
+  //    占位符方案（以 NUL 字节包裹序号）的理论边界。允许 \t \n \r，拒绝其余 C0 与 DEL（1.4.0）。
+  if (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(raw)) {
+    errors.push(`${f}: 含控制字符（NUL 等不可见字符），请清理后重新生成`);
+    continue;
+  }
   // 剥离 frontmatter（与 Astro 行为一致）
   const fm = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   if (!fm) {

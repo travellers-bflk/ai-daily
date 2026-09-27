@@ -136,6 +136,24 @@ a:hover {
   border-radius: 4px;
 }
 
+/* 键盘可达性：默认移出视口，聚焦时固定到左上角（z-index 须盖过 sticky 页头的 10） */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 20;
+  padding: 0.6rem 1rem;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 0 0 var(--radius-sm) 0;
+  text-decoration: none;
+}
+
+.skip-link:focus-visible {
+  left: 0;
+  color: #fff;
+}
+
 .wrap {
   width: 100%;
   max-width: 52rem;
@@ -369,6 +387,107 @@ a:hover {
   color: var(--fg-faint);
   font-size: 0.86rem;
   font-style: italic;
+}
+
+/* ---------- 首页：按月收纳（月历点阵卡） ---------- */
+.month-matrix {
+  margin-bottom: 3rem;
+}
+
+.month-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: 1rem;
+}
+
+/* 复用 .day-card 的视觉令牌，保持卡片语言一致 */
+.month-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.2rem 1.2rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.month-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-strong);
+}
+
+.month-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-bottom: 0.8rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px dashed var(--border);
+}
+
+.month-card-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.month-card-count {
+  color: var(--fg-faint);
+  font-size: 0.82rem;
+}
+
+.month-card-all {
+  margin-left: auto;
+  font-size: 0.76rem;
+  color: var(--fg-faint);
+}
+
+.month-card-all:hover {
+  color: var(--accent);
+}
+
+.cal-weekdays,
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.cal-weekdays {
+  margin-bottom: 4px;
+  font-size: 0.72rem;
+  color: var(--fg-faint);
+  text-align: center;
+}
+
+.cal-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  border-radius: var(--radius-sm);
+}
+
+/* 无日报的日期仅作静默占位，有日报的日期才是可点链接（accent 主色，
+   与归档月格 hover 的 accent 语义一致；暗色主题变量自动覆写） */
+span.cal-day {
+  color: var(--fg-faint);
+}
+
+a.cal-day {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+a.cal-day:hover {
+  outline: 1px solid var(--accent);
+  text-decoration: none;
+}
+
+.cal-day.is-today {
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 
 /* ---------- 日报详情页：板块卡片 ---------- */
@@ -714,6 +833,9 @@ a:hover {
   .day-grid {
     grid-template-columns: 1fr;
   }
+  .month-cards-grid {
+    grid-template-columns: 1fr;
+  }
   .news-card {
     padding: 1rem 1.1rem;
   }
@@ -745,6 +867,7 @@ a:hover {
   }
   .news-card,
   .day-card,
+  .month-card,
   .headlines-bar {
     box-shadow: none;
   }

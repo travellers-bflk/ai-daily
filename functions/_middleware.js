@@ -18,7 +18,7 @@
  *   - 不复制一份 CSP。直接读 _headers 已经设好的头，往 script-src 里插 nonce，
  *     避免「两处各写一份、迟早漂移」。
  *   - 只动 HTML 响应；已是 nonce 策略或没有 CSP 的原样返回。
- *   - 任何异常都不改变原有响应——中间件只能是加分项，不能成为新的故障点。
+ *   - 响应头改不动时不介入——中间件只能是加分项，不能成为新的故障点。
  *   - 若 Pages 对静态资源不执行中间件（或函数未部署），响应仍是 _headers 里那份
  *     严格策略：Web Analytics 照常工作，只有 JSD 的内联引导脚本继续被拦。
  *
@@ -44,13 +44,10 @@ function withNonce(csp, nonce) {
 }
 
 export async function onRequest(context) {
-  let response;
-  try {
-    response = await context.next();
-  } catch {
-    // 拿不到响应就完全不介入，交给 Pages 自己的错误处理
-    return new Response('Internal Error', { status: 500 });
-  }
+  // context.next() 抛异常时原样上抛，交回 Pages 自己的错误处理。
+  // 曾经在这里自造一个裸 500 响应——那种响应不携带 _headers 里的任何安全头
+  // （nosniff/frame-ancestors/CSP 全丢），比 Pages 默认错误页更差（1.4.0 修复）。
+  const response = await context.next();
 
   try {
     const type = response.headers.get('content-type') || '';

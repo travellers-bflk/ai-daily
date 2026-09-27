@@ -4,8 +4,13 @@ import '../styles/global.css';
 interface Props {
   title: string;
   description?: string;
-  /** 站内规范路径（如 /daily/2026-09-05/），用于 canonical 与 og:url；缺省视为首页 */
-  canonicalPath?: string;
+  /**
+   * 站内规范路径（如 /daily/2026-09-05/），用于 canonical 与 og:url。
+   * 必填：曾经缺省视为首页，导致归档/隐私页的 canonical 与 og:url 全部
+   * 错指首页、权重被合并（1.4.0 修复）。404 等 noindex 页面也须传值
+   * （仅满足类型，实际不输出）。
+   */
+  canonicalPath: string;
   /** og:type：首页 website，日报详情 article */
   ogType?: 'website' | 'article';
   /**
@@ -19,7 +24,7 @@ interface Props {
 const {
   title,
   description = '每日 AI 行业资讯日报，由 AI 搜集整理发布。',
-  canonicalPath = '/',
+  canonicalPath,
   ogType = 'website',
   noindex = false,
 } = Astro.props;
@@ -39,7 +44,6 @@ const ogImageUrl = new URL('/og-image.png', site);
     <link rel="alternate" type="application/rss+xml" title="AI 日报 RSS" href="/rss.xml" />
     {noindex && <meta name="robots" content="noindex, nofollow" />}
     {!noindex && <link rel="canonical" href={canonicalUrl} />}
-    <meta name="generator" content={Astro.generator} />
     <meta name="description" content={description} />
     <meta name="theme-color" content="#fafaf7" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0f1114" media="(prefers-color-scheme: dark)" />
@@ -67,6 +71,7 @@ const ogImageUrl = new URL('/og-image.png', site);
     <slot name="head" />
   </head>
   <body>
+    <a class="skip-link" href="#main">跳到正文</a>
     <header class="site-header">
       <div class="wrap header-inner">
         <a class="site-title" href="/">
@@ -80,7 +85,7 @@ const ogImageUrl = new URL('/og-image.png', site);
         </nav>
       </div>
     </header>
-    <main class="wrap main-area">
+    <main class="wrap main-area" id="main">
       <slot />
     </main>
     <footer class="site-footer">

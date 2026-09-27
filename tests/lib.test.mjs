@@ -20,6 +20,7 @@ import {
   extractHeadlines,
   daysInMonth,
   monthDays,
+  calendarCells,
 } from '../src/lib/utils.ts';
 import { getSectionMeta } from '../src/lib/sections.ts';
 
@@ -123,6 +124,49 @@ describe('月份天数', () => {
     assert.equal(days.length, 30);
     assert.equal(days[0], '2026-09-01');
     assert.equal(days[29], '2026-09-30');
+  });
+});
+
+/* ---------------- calendarCells：首页按月收纳的月历点阵 ---------------- */
+
+describe('calendarCells', () => {
+  test('2026-09：1 号是周二，周一开头前置空白 1 格，共 35 格', () => {
+    const cells = calendarCells(2026, 9);
+    assert.equal(cells[0], null, '周一格应为空白');
+    assert.equal(cells[1], 1, '周二格应为 1 号');
+    assert.equal(cells.filter((c) => c !== null).length, 30);
+    assert.equal(cells.length % 7, 0);
+    assert.equal(cells.length, 35);
+  });
+
+  test('前置空白数与 UTC 星期一致（锁定时区基准，防本地 getter 回潮）', () => {
+    for (const [y, m] of [[2026, 9], [2027, 1], [2024, 2], [2026, 12]]) {
+      const cells = calendarCells(y, m);
+      const firstUtc = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
+      const expectedLead = (firstUtc + 6) % 7;
+      const actualLead = cells.findIndex((c) => c === 1);
+      assert.equal(actualLead, expectedLead, `${y}-${m} 前置空白数不符合 UTC 基准`);
+    }
+  });
+
+  test('跨年：2027-01（1 号周五）长度合规且日期连续', () => {
+    const cells = calendarCells(2027, 1);
+    assert.equal(cells.length % 7, 0);
+    const days = cells.filter((c) => c !== null);
+    assert.equal(days.length, 31);
+    assert.deepEqual(days, Array.from({ length: 31 }, (_, i) => i + 1));
+  });
+
+  test('闰年 2024-02 含 29 号，平年 2026-02 不含', () => {
+    assert.ok(calendarCells(2024, 2).includes(29));
+    assert.ok(!calendarCells(2026, 2).includes(29));
+  });
+
+  test('整周对齐的月份不多补空白周（2026-02-01 是周日，28 天 = 恰好 5 周）', () => {
+    // 2026-02-01 是周日 → 周一开头前置空白 6 格；6 + 28 = 34 → 补到 35
+    const cells = calendarCells(2026, 2);
+    assert.equal(cells.length, 35);
+    assert.equal(cells[6], 1, '周日格应为 1 号');
   });
 });
 
