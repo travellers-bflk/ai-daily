@@ -19,7 +19,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-      # 避开每日 22:00（本地时间）的日报自动化推送，减少并发冲突
+      # 避开每日 20:00（本地时间）的日报自动化推送，减少并发冲突
       time: "10:00"
     # 次要/补丁版本合并成一个 PR，降低噪音；主要版本单独出 PR，便于逐个评估
     groups:
@@ -40,6 +40,6 @@ updates:
       day: monday
       time: "10:00"
     # workflow 里的 actions 已钉到 commit SHA，dependabot 能识别并提议更新 SHA。
-    # 注：checkout 与 setup-node 上游已到 v7，首次运行会提议跨大版本升级，
-    # 那属于独立决策，不要顺手合并。
+    # checkout 与 setup-node 已于 2026-09-30 升至 v7（消除 Node 20 弃用告警；
+    # runner 此前已被强制用 Node 24 跑 v4，升级属追认现状）。后续大版本仍逐个评估。
     open-pull-requests-limit: 3
