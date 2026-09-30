@@ -27,6 +27,11 @@ updates:
         update-types: [minor, patch]
     # 主要版本（如 astro 5 → 7）不自动合并，只出 PR 供人工决策
     open-pull-requests-limit: 5
+    ignore:
+      # typescript 7 与 @astrojs/check 的 peer 依赖（^5 || ^6）冲突，npm ci 直接
+      # ERESOLVE（PR #3 实测，2026-09-09）。上游支持 TS 7 前忽略，删除本条目即恢复
+      - dependency-name: "typescript"
+        versions: [">=7.0.0"]
 
   - package-ecosystem: github-actions
     directory: /
