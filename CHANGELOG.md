@@ -7,6 +7,29 @@
 
 ---
 
+## [1.4.2] - 2026-10-02
+
+依赖安全维护：修复 6 条基线外新 advisory 导致的 CI 失败。
+
+### 修复 · 传递依赖漏洞（npm audit fix，非 major）
+
+- **devalue 5.9.2 → 5.9.4**（astro 的传递依赖，声明范围 `^5.6.2` 内的补丁
+  升级）：上游 2026-10-01 集中披露的 6 条 advisory 全部修复——
+  `stringify`/`uneval` 序列化共享内存（GHSA-j22f-vq7h-c4qm，high）、
+  重复原始字符串导致二次方膨胀（GHSA-mcm9-63f2-9j32，high）、
+  `stringifyAsync` 已捕获 Promise 仍产生 unhandled rejection
+  （GHSA-x5rw-q4pp-hg5g，high）、null-prototype 对象键绕过 `__proto__`
+  拒绝（GHSA-4q55-j62x-fr9h，medium）、`uneval` 稀疏数组 CPU 放大
+  （GHSA-hx4r-w6wj-j8fg，medium）与稀疏数组被求值时的即时分配
+  （GHSA-wf3x-273g-mvxv，low）。
+- devalue 是 Astro 构建期序列化工具，产物仍是纯静态站点；修复只动
+  `package-lock.json`，无运行时行为变化（顺带补回了该条目缺失的
+  `resolved`/`integrity` 字段）。
+- 基线（astro 5.x / esbuild / sharp 共 13 条已评估接受的条目）不变：
+  非 major 修复不可得，暴露面分析见 1.1.0 起的「已知问题」记录。
+
+---
+
 ## [1.4.1] - 2026-09-30
 
 依赖安全维护：修复 12 条基线外新 advisory 导致的 CI 失败。

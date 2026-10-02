@@ -2,7 +2,7 @@
 
 每日自动生成的 AI 行业资讯日报，发布于 [439952066.xyz](https://439952066.xyz)。
 
-当前版本 **1.4.1** · 变更记录见 [CHANGELOG.md](CHANGELOG.md)
+当前版本 **1.4.2** · 变更记录见 [CHANGELOG.md](CHANGELOG.md)
 
 ## 内容
 
