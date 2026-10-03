@@ -1,4 +1,6 @@
-import { defineCollection, z } from 'astro:content';
+import { defineCollection } from 'astro:content';
+// astro 6 起 z 改由 astro/zod 导出（astro:content 的 re-export 已弃用）
+import { z } from 'astro/zod';
 import { glob } from 'astro/loaders';
 
 const daily = defineCollection({

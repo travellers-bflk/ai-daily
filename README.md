@@ -2,7 +2,7 @@
 
 每日自动生成的 AI 行业资讯日报，发布于 [439952066.xyz](https://439952066.xyz)。
 
-当前版本 **1.4.3** · 变更记录见 [CHANGELOG.md](CHANGELOG.md)
+当前版本 **1.5.0** · 变更记录见 [CHANGELOG.md](CHANGELOG.md)
 
 ## 内容
 
@@ -13,7 +13,7 @@
 
 ## 技术
 
-- [Astro](https://astro.build) 静态站点（5.x）
+- [Astro](https://astro.build) 静态站点（7.x，2026-10-03 由 5.x 迁移）
 - 日报为 Markdown 文件，存放于 `src/content/daily/YYYY-MM-DD.md`
 - 设计：Apple Keynote 风格卡片化排版，板块配色语义化，支持深色模式
 - 部署：GitHub 推送 → Cloudflare Pages 自动构建 → 域名 `439952066.xyz`
@@ -22,13 +22,14 @@
 - 依赖跟踪：`.github/dependabot.yml`（npm 与 github-actions 两个生态，每周）
 - 行尾统一为 LF（`.gitattributes` + `.editorconfig`）
 
-> **已知依赖状况**：`npm audit` 会报 astro / sharp / esbuild 共 3 项。已逐条核实这些
-> advisory 所需的特性本项目**一个都没用到**（无 `define:vars`、无 `{...}` spread props、
-> 无 View Transitions、无 `server:` 指令、无动态 slot 名、无页面内 `fetch`、无 `<Image />`），
-> 且产物是纯静态站点、生产环境无 Node 运行时，因此当前**零暴露面**。
-> astro 5.18.2 已是 5.x 最新且无补丁版本，修复要求 7.1+（跨两个大版本）。
-> **切勿执行 `npm audit fix --force`**——它会直接装 astro 7.x，把一个每天在自动发布的
-> 站点推入未计划的大版本迁移。该迁移应作为独立事项有计划地做。
+> **已知依赖状况**：2026-10-03 完成 astro 5.x → 7.3.5 迁移后，`npm audit` 从
+> 13+1 条收缩到 **1 条**（http-cache-semantics GHSA-ch52-4w7c-c8xp，上游未出补丁，
+> npm 最新版即漏洞版）。已逐条核实该 advisory 所需特性本项目未使用（astro 仅在构建期
+> 远程图片优化里用它算 TTL，本站无远程图片、无共享缓存、无客户端 max-stale 求值），
+> 且产物是纯静态站点、生产环境无 Node 运行时，当前**零暴露面**，评估接受入
+> `.github/audit-baseline.json`（分析见 CHANGELOG 1.4.3/1.5.0）。
+> **切勿执行 `npm audit fix --force`**——它会跨大版本强装依赖，把每天在自动发布的
+> 站点推入未计划的迁移。大版本迁移一律作为独立事项有计划地做。
 
 ## 日报格式契约
 

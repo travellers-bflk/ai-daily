@@ -7,6 +7,53 @@
 
 ---
 
+## [1.5.0] - 2026-10-03
+
+astro 5.18.2 → 7.3.5 大版本迁移（1.4.0 排期项落地）。跨 6/7 两个大版本，
+破坏性变更已逐条对照官方升级指南与本站 API 使用面核实；dependabot PR #7
+提供了经 CI 与 Cloudflare 预览验证的依赖树，在此之上合成迁移提交。
+
+### 变更
+
+- **astro 5.18.2 → 7.3.5**：5.x 进入维护期后，基线 13 条 advisory 全部挂在
+  5.x 依赖链上、且审计库仍在持续收录新条目（1.4.1/1.4.2/1.4.3 一周三次 CI 红）。
+  迁移后 `npm audit` 报告从 14 条收缩到 **1 条**（仅剩无补丁的
+  http-cache-semantics，暴露面分析见 1.4.3），基线文件同步重置。
+- 官方集成随迁移升级（`@astrojs/upgrade` 的既定做法）：@astrojs/rss
+  4.0.12 → 4.0.19、@astrojs/sitemap 3.4.2 → 3.7.4、@astrojs/check 0.9.4 → 0.9.10
+  （其 peer 已声明支持 TypeScript 6，为 dependabot PR #8 铺路）；传递依赖里
+  devalue 仍按 1.4.2 的修复固定在 5.9.4。
+- `src/content.config.ts`：`z` 改从 `astro/zod` 导入（`astro:content` 的 re-export 自
+  6.0 起弃用）。schema 本体未用 Zod 4 移除的 API，无需改动。
+
+### 兼容性核查记录（v6/v7 破坏性变更 × 本站使用面）
+
+- 内容集合：本站已是 v5 Content Layer 写法（glob loader、`report.id`），
+  全仓库无 `entry.render()` / `getEntryBySlug` / `Astro.glob` / `type: 'content'`
+  / 数字类型 params——v6 的旧 API 移除零命中；`Astro.site` 仅在页面
+  frontmatter 使用（v6 只限制 `getStaticPaths` 内访问）。
+- 正文渲染走自研 parser（`parseDaily` + `renderInlineMarkdown`），不经过 astro 的
+  Markdown 管线——v7 默认切换到 Sätteri 对本站无影响；全站也未配置
+  remark/rehype 插件。
+- v7 Rust 编译器不再静默修正非法 HTML：构建在 PR #7 CI 与本地合成树上均通过，
+  模板无未闭合标签；`compressHTML: 'jsx'` 成为默认后，页头等间距由 flex
+  `gap` 承担（不依赖空白文本节点）。已对 Cloudflare 预览部署与生产做
+  逐页标记对比（新闻卡/来源链接/月历卡计数一致、结构无差异）。
+- v7 保留文件名 `src/fetch.ts`：本站无此文件；`astro:transitions` 内部 API、
+  `@astrojs/db`、实验标志：均未使用。Node 要求 ≥22.12：engines 已 ≥22.18，
+  CI 用 Node 24。
+- 端点尾斜杠行为收紧：RSS/sitemap 链接本就无尾斜杠（`/rss.xml`）。
+
+### 运维
+
+- dependabot PR #7（astro 7.3.5）使命已由本提交直接完成，随合并关闭；
+  PR #8（TypeScript 6.0.3）在其后单独评估合并。
+- 本机合成锁文件方法（网络受限环境）：以 dependabot PR 分支的完整依赖树为底，
+  用 main 的修复条目（devalue 5.9.4，含 integrity）替换、对齐根版本与声明范围，
+  再由 `npm audit --package-lock-only` 对新树预计算基线收缩。
+
+---
+
 ## [1.4.3] - 2026-10-03
 
 依赖安全维护：修复 1 条基线外新 advisory 导致的 CI 失败。
