@@ -7,6 +7,34 @@
 
 ---
 
+## [1.4.3] - 2026-10-03
+
+依赖安全维护：修复 1 条基线外新 advisory 导致的 CI 失败。
+
+### 评估接受 · http-cache-semantics ≤ 4.2.0（GHSA-ch52-4w7c-c8xp / CVE-2026-93748，high）
+
+- 漏洞面：共享缓存（shared cache）处理客户端 `max-stale` 指令时，未正确校验
+  「因安全原因被清零的缓存条目」，攻击者可凭大 max-stale 值读到其他用户的
+  缓存响应（含 Set-Cookie 会话凭据）。成立前提：多用户共享缓存 + 客户端
+  max-stale 求值路径 + 按用户区分的凭据响应。
+- 暴露面分析（方法见 1.1.0 起「已知问题」）：astro 唯一使用点是
+  `assets/build/remote.ts` 的构建期远程图片优化——仅用 CachePolicy 对
+  **当次响应**计算 TTL（`storable()`/`timeToLive()`），不是多用户共享缓存；
+  请求是无 cache-control 头的 plain GET，max-stale 求值路径不执行；
+  抓取的是公开图片，不涉及按用户的凭据响应。三个前提均不成立。
+  本站更进一步：`astro.config.mjs` 未配置 `image.domains`/`remotePatterns`，
+  全站无远程图片（仓库代码检索 `astro:assets` 零命中），该代码路径
+  根本不会执行；产物仍是纯静态站点。
+- 无补丁可升：4.2.0 即 npm 最新版，`first_patched_version` 为空，astro
+  声明范围 `^4.2.0` 内没有可修复版本，`npm audit fix` 无解。按基线流程
+  评估接受，加入 `.github/audit-baseline.json`；上游出补丁并随依赖升级
+  带出后，基线脚本会提示清理本条目。
+- 复盘：这是本周第三次同类 CI 红（1.4.1 undici/fast-uri 12 条、1.4.2
+  devalue 6 条、本次 1 条），均为审计库异步收录上游 advisory 所致、
+  仓库代码无变化。闸门按设计工作（fail closed、强制暴露面分析），非误报。
+
+---
+
 ## [1.4.2] - 2026-10-02
 
 依赖安全维护：修复 6 条基线外新 advisory 导致的 CI 失败。
